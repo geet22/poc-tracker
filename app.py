@@ -135,7 +135,61 @@ st.title("Labcorp × Snowflake — POC Tracker")
 st.caption(f"{ov.get('Business Unit', 'Business unit not set')}  ·  {ov.get('Primary Use Case', 'Use case not set')}  ·  Status: **{ov.get('Status', 'Not set')}**")
 st.divider()
 
-tab1, tab2, tab3, tab4 = st.tabs(["Overview", "KPIs & Budget", "Action Plan", "Updates"])
+tab0, tab1, tab2, tab3, tab4 = st.tabs(["Sheet View", "Overview", "KPIs & Budget", "Action Plan", "Updates"])
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# TAB 0 — SHEET VIEW (live read-only view of all 4 sheets)
+# ══════════════════════════════════════════════════════════════════════════
+
+with tab0:
+    st.subheader("Live Sheet Data")
+    st.caption("Read-only mirror of your Google Sheet. Refreshes every 15 seconds.")
+
+    # Overview
+    st.markdown("#### Overview")
+    if ov:
+        ov_df = pd.DataFrame([ov])
+        # split into two halves for readability
+        cols = list(ov_df.columns)
+        half = len(cols) // 2
+        st.dataframe(ov_df[cols[:half]], use_container_width=True, hide_index=True)
+        st.dataframe(ov_df[cols[half:]], use_container_width=True, hide_index=True)
+    else:
+        st.dataframe(pd.DataFrame(columns=OVERVIEW_HEADERS), use_container_width=True, hide_index=True)
+        st.caption("No overview data yet — fill it in via the Overview tab.")
+
+    st.divider()
+
+    # KPIs
+    st.markdown("#### KPIs")
+    kpis_sv = load_kpis()
+    st.dataframe(kpis_sv if not kpis_sv.empty else pd.DataFrame(columns=KPI_HEADERS),
+                 use_container_width=True, hide_index=True)
+
+    st.divider()
+
+    # Action Items
+    st.markdown("#### Mutual Action Plan")
+    actions_sv = load_actions()
+    st.dataframe(actions_sv if not actions_sv.empty else pd.DataFrame(columns=ACTION_HEADERS),
+                 use_container_width=True, hide_index=True)
+
+    st.divider()
+
+    # Updates
+    st.markdown("#### Status Updates")
+    updates_sv = load_updates()
+    if not updates_sv.empty:
+        st.dataframe(updates_sv.sort_values("Date", ascending=False),
+                     use_container_width=True, hide_index=True)
+    else:
+        st.dataframe(pd.DataFrame(columns=UPDATE_HEADERS), use_container_width=True, hide_index=True)
+
+    st.divider()
+    if st.button("Refresh"):
+        st.cache_data.clear()
+        st.rerun()
 
 
 # ══════════════════════════════════════════════════════════════════════════
