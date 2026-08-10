@@ -13,7 +13,7 @@ SCOPES = [
 ]
 
 # ── Header definitions ────────────────────────────────────────────────────────
-REGISTRY_HEADERS = ["POC_ID", "Customer", "AE", "SE", "Status", "Created"]
+REGISTRY_HEADERS = ["POC_ID", "Customer", "Engagement", "AE", "SE", "Status", "Created"]
 
 OVERVIEW_HEADERS = [
     "POC_ID",
@@ -160,9 +160,9 @@ def delete_sheet_row(sheet: str, sheet_row: int):
     get_ss().worksheet(sheet).delete_rows(sheet_row)
     st.cache_data.clear()
 
-def create_poc(poc_id: str, customer: str, ae: str, se: str, status: str):
+def create_poc(poc_id: str, customer: str, engagement: str, ae: str, se: str, status: str):
     ws = get_ss().worksheet("POC_Registry")
-    ws.append_row([poc_id, customer, ae, se, status, datetime.today().strftime("%Y-%m-%d")])
+    ws.append_row([poc_id, customer, engagement, ae, se, status, datetime.today().strftime("%Y-%m-%d")])
     st.cache_data.clear()
 
 def get_all_sheet_row(sheet: str, poc_id: str) -> list[tuple[int, dict]]:
@@ -203,8 +203,10 @@ with st.sidebar:
     if poc_options:
         labels = []
         for _, r in registry.iterrows():
-            emoji = STATUS_EMOJI.get(r.get("Status", ""), "⚪")
-            labels.append(f"{emoji}  {r['Customer']}")
+            emoji      = STATUS_EMOJI.get(r.get("Status", ""), "⚪")
+            engagement = r.get("Engagement", "")
+            label      = f"{emoji}  {r['Customer']}  —  {engagement}" if engagement else f"{emoji}  {r['Customer']}"
+            labels.append(label)
 
         selected_idx = st.radio(
             "Select Engagement",
@@ -224,15 +226,16 @@ with st.sidebar:
     # New POC
     with st.expander("＋  New POC", expanded=(active_poc_id is None)):
         with st.form("new_poc_form"):
-            np_customer = st.text_input("Customer Name *")
-            np_ae       = st.text_input("Snowflake AE")
-            np_se       = st.text_input("Snowflake SE")
-            np_status   = st.selectbox("Status", STATUS_OPTIONS)
+            np_customer    = st.text_input("Customer Name *")
+            np_engagement  = st.text_input("Engagement / BU", placeholder="e.g. Drug Development · RWE")
+            np_ae          = st.text_input("Snowflake AE")
+            np_se          = st.text_input("Snowflake SE")
+            np_status      = st.selectbox("Status", STATUS_OPTIONS)
             if st.form_submit_button("Create POC", type="primary"):
                 if np_customer.strip():
-                    new_id = np_customer.strip().lower().replace(" ", "-")[:24]
-                    create_poc(new_id, np_customer.strip(), np_ae, np_se, np_status)
-                    st.success(f"Created: {np_customer}")
+                    slug   = (np_customer.strip() + "-" + np_engagement.strip()).lower().replace(" ", "-").replace("·","").replace("/","")[:32]
+                    create_poc(slug, np_customer.strip(), np_engagement.strip(), np_ae, np_se, np_status)
+                    st.success(f"Created: {np_customer} — {np_engagement}")
                     st.rerun()
                 else:
                     st.warning("Customer name required.")
@@ -250,10 +253,13 @@ actions = load_actions(active_poc_id)
 updates = load_updates(active_poc_id)
 
 # ── Page header ───────────────────────────────────────────────────────────────
-customer_name = active_row.get("Customer", active_poc_id)
-status_badge  = STATUS_EMOJI.get(ov.get("Status", active_row.get("Status", "")), "⚪")
+customer_name   = active_row.get("Customer", active_poc_id)
+engagement_name = active_row.get("Engagement", "")
+status_badge    = STATUS_EMOJI.get(ov.get("Status", active_row.get("Status", "")), "⚪")
 
 st.title(f"{customer_name} × Snowflake — POC Tracker")
+if engagement_name:
+    st.subheader(engagement_name, divider=False)
 st.caption(
     f"{ov.get('Business Unit', '—')}  ·  "
     f"{ov.get('Primary Use Case', '—')}  ·  "
