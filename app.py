@@ -186,6 +186,296 @@ except Exception as e:
     st.error(f"Could not connect to Google Sheets: {e}")
     st.stop()
 
+# ── Premium CSS injection ─────────────────────────────────────────────────────
+st.markdown("""
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+html, body, [class*="css"], .stApp { font-family: 'Inter', sans-serif !important; }
+
+/* Hide Streamlit chrome */
+#MainMenu, footer, header { visibility: hidden; height: 0; }
+.block-container { padding-top: 1.5rem !important; padding-bottom: 2rem !important; }
+
+/* ── Sidebar ── */
+section[data-testid="stSidebar"] {
+    background: #0B1929 !important;
+    border-right: 1px solid #1E3A5F !important;
+}
+section[data-testid="stSidebar"] .stRadio label,
+section[data-testid="stSidebar"] p,
+section[data-testid="stSidebar"] span,
+section[data-testid="stSidebar"] small,
+section[data-testid="stSidebar"] div { color: #CBD5E0 !important; }
+section[data-testid="stSidebar"] h1,
+section[data-testid="stSidebar"] h2,
+section[data-testid="stSidebar"] h3 { color: #FFFFFF !important; }
+section[data-testid="stSidebar"] hr { border-color: #1E3A5F !important; }
+section[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label {
+    background: rgba(255,255,255,.04) !important;
+    border: 1px solid #1E3A5F !important;
+    border-radius: 8px !important;
+    padding: 10px 14px !important;
+    margin-bottom: 6px !important;
+    transition: background .2s !important;
+    font-size: .85rem !important;
+}
+section[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:hover {
+    background: rgba(41,181,232,.1) !important;
+    border-color: #29B5E8 !important;
+}
+section[data-testid="stSidebar"] input[type="text"],
+section[data-testid="stSidebar"] select,
+section[data-testid="stSidebar"] textarea {
+    background: rgba(255,255,255,.06) !important;
+    border: 1px solid #1E3A5F !important;
+    color: #FFFFFF !important;
+    border-radius: 6px !important;
+}
+section[data-testid="stSidebar"] button[kind="primaryFormSubmit"],
+section[data-testid="stSidebar"] button[kind="primary"] {
+    background: #29B5E8 !important; color: #000 !important; border: none !important;
+    border-radius: 6px !important; font-weight: 600 !important;
+}
+
+/* ── Tabs ── */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 4px;
+    border-bottom: 2px solid #E2E8F0;
+}
+.stTabs [data-baseweb="tab"] {
+    font-size: .82rem !important; font-weight: 500 !important;
+    letter-spacing: .04em !important;
+    padding: 10px 20px !important;
+    border-radius: 8px 8px 0 0 !important;
+    color: #718096 !important;
+}
+.stTabs [aria-selected="true"] {
+    background: #EBF8FF !important;
+    color: #0B6E9B !important;
+    border-bottom: 2px solid #29B5E8 !important;
+}
+
+/* ── Primary buttons ── */
+.stButton > button[kind="primary"] {
+    background: #29B5E8 !important; color: #000 !important;
+    border: none !important; border-radius: 6px !important;
+    font-weight: 600 !important; font-size: .82rem !important;
+    letter-spacing: .04em !important;
+    padding: 8px 24px !important;
+}
+.stButton > button {
+    border-radius: 6px !important; font-size: .82rem !important;
+    font-weight: 500 !important;
+}
+
+/* ── Inputs ── */
+.stTextInput input, .stTextArea textarea, .stSelectbox select {
+    border-radius: 6px !important;
+    border: 1px solid #CBD5E0 !important;
+    font-size: .88rem !important;
+}
+.stTextInput input:focus, .stTextArea textarea:focus {
+    border-color: #29B5E8 !important;
+    box-shadow: 0 0 0 3px rgba(41,181,232,.15) !important;
+}
+
+/* ── Expanders ── */
+.streamlit-expanderHeader {
+    font-size: .85rem !important; font-weight: 600 !important;
+    color: #2D3748 !important;
+    background: #F7FAFC !important;
+    border-radius: 8px !important;
+    border: 1px solid #E2E8F0 !important;
+}
+
+/* ── Dividers ── */
+hr { border-color: #E2E8F0 !important; }
+
+/* ── Custom KPI card ── */
+.kpi-grid { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 24px; }
+.kpi-card {
+    flex: 1 1 200px; min-width: 180px;
+    background: #fff;
+    border: 1px solid #E2E8F0;
+    border-top: 3px solid #CBD5E0;
+    border-radius: 10px;
+    padding: 18px 20px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06);
+}
+.kpi-card.met   { border-top-color: #38A169; }
+.kpi-card.risk  { border-top-color: #DD6B20; }
+.kpi-card.track { border-top-color: #3182CE; }
+.kpi-card.none  { border-top-color: #A0AEC0; }
+.kpi-name  { font-size: .78rem; font-weight: 600; color: #4A5568; letter-spacing: .05em; text-transform: uppercase; margin-bottom: 8px; }
+.kpi-value { font-size: 1.9rem; font-weight: 700; color: #1A202C; line-height: 1; margin-bottom: 4px; }
+.kpi-target{ font-size: .76rem; color: #718096; margin-bottom: 10px; }
+.kpi-badge { display: inline-block; font-size: .7rem; font-weight: 600; padding: 3px 10px; border-radius: 20px; letter-spacing: .06em; }
+.badge-met   { background: #C6F6D5; color: #22543D; }
+.badge-track { background: #BEE3F8; color: #1A365D; }
+.badge-risk  { background: #FEEBC8; color: #7B341E; }
+.badge-none  { background: #EDF2F7; color: #4A5568; }
+.badge-blocked { background: #FED7D7; color: #742A2A; }
+.badge-won   { background: #C6F6D5; color: #22543D; }
+.badge-lost  { background: #FED7D7; color: #742A2A; }
+.badge-active   { background: #BEE3F8; color: #1A365D; }
+.badge-planning { background: #EDF2F7; color: #4A5568; }
+.badge-atrisk   { background: #FEEBC8; color: #7B341E; }
+
+/* ── Action item row ── */
+.action-row {
+    display: flex; align-items: flex-start; gap: 14px;
+    padding: 14px 18px;
+    border-radius: 8px;
+    border: 1px solid #E2E8F0;
+    background: #fff;
+    margin-bottom: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.04);
+}
+.action-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; }
+.dot-open    { background: #CBD5E0; }
+.dot-prog    { background: #3182CE; }
+.dot-done    { background: #38A169; }
+.dot-blocked { background: #E53E3E; }
+.action-body { flex: 1; }
+.action-title { font-size: .9rem; font-weight: 600; color: #1A202C; margin-bottom: 4px; }
+.action-meta  { font-size: .75rem; color: #718096; }
+.action-note  { font-size: .78rem; color: #4A5568; margin-top: 6px; font-style: italic; }
+.action-right { text-align: right; flex-shrink: 0; }
+.action-due   { font-size: .74rem; color: #718096; margin-bottom: 6px; }
+
+/* ── Update feed ── */
+.update-card {
+    background: #fff;
+    border: 1px solid #E2E8F0;
+    border-left: 3px solid #29B5E8;
+    border-radius: 0 8px 8px 0;
+    padding: 16px 20px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.04);
+}
+.update-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.update-by   { font-size: .8rem; font-weight: 600; color: #2D3748; }
+.update-date { font-size: .75rem; color: #A0AEC0; }
+.update-text { font-size: .88rem; color: #4A5568; line-height: 1.7; }
+
+/* ── Summary bar ── */
+.summary-bar { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
+.summary-chip {
+    background: #EBF8FF; border: 1px solid #BEE3F8;
+    border-radius: 20px; padding: 6px 16px;
+    font-size: .78rem; font-weight: 600; color: #0B6E9B;
+}
+.summary-chip.green { background:#F0FFF4; border-color:#9AE6B4; color:#22543D; }
+.summary-chip.amber { background:#FFFAF0; border-color:#FBD38D; color:#7B341E; }
+.summary-chip.gray  { background:#F7FAFC; border-color:#CBD5E0; color:#4A5568; }
+</style>
+""", unsafe_allow_html=True)
+
+
+def status_badge(s: str) -> str:
+    m = {
+        "Met":             "badge-met",
+        "On Track":        "badge-track",
+        "At Risk":         "badge-risk",
+        "Not Started":     "badge-none",
+        "Complete":        "badge-met",
+        "In Progress":     "badge-track",
+        "Open":            "badge-none",
+        "Blocked":         "badge-blocked",
+        "Completed — Won": "badge-won",
+        "Completed — Lost":"badge-lost",
+        "Active":          "badge-active",
+        "Planning":        "badge-planning",
+    }
+    cls = m.get(s, "badge-none")
+    return f'<span class="kpi-badge {cls}">{s}</span>'
+
+def kpi_card_class(s: str) -> str:
+    return {"Met":"met","On Track":"track","At Risk":"risk"}.get(s,"none")
+
+def action_dot_class(s: str) -> str:
+    return {"Complete":"dot-done","In Progress":"dot-prog","Blocked":"dot-blocked"}.get(s,"dot-open")
+
+def render_kpi_cards(df: pd.DataFrame):
+    if df.empty:
+        st.info("No KPIs defined yet.")
+        return
+    cols = st.columns(3)
+    for i, (_, row) in enumerate(df.iterrows()):
+        s    = str(row.get("Status",""))
+        val  = str(row.get("Current Value","—"))
+        unit = str(row.get("Unit",""))
+        with cols[i % 3]:
+            st.markdown(f"""
+<div class="kpi-card {kpi_card_class(s)}">
+  <div class="kpi-name">{row.get("KPI","")}</div>
+  <div class="kpi-value">{val} <span style="font-size:1rem;font-weight:400;color:#718096">{unit}</span></div>
+  <div class="kpi-target">Target: {row.get("Target","—")} {unit}</div>
+  {status_badge(s)}
+</div>""", unsafe_allow_html=True)
+
+def render_actions(df: pd.DataFrame):
+    if df.empty:
+        st.info("No action items yet.")
+        return
+    for _, row in df.iterrows():
+        s     = str(row.get("Status","Open"))
+        dot   = action_dot_class(s)
+        note  = str(row.get("Notes",""))
+        note_html = f'<div class="action-note">💬 {note}</div>' if note else ""
+        st.markdown(f"""
+<div class="action-row">
+  <div class="action-dot {dot}"></div>
+  <div class="action-body">
+    <div class="action-title">{row.get("Action","")}</div>
+    <div class="action-meta">
+      <b>{row.get("Owner","")}</b> &nbsp;·&nbsp; {row.get("Category","")}
+    </div>
+    {note_html}
+  </div>
+  <div class="action-right">
+    <div class="action-due">📅 {row.get("Due Date","")}</div>
+    {status_badge(s)}
+  </div>
+</div>""", unsafe_allow_html=True)
+
+def render_updates(df: pd.DataFrame):
+    if df.empty:
+        st.info("No updates posted yet.")
+        return
+    sorted_df = df.sort_values("Date", ascending=False)
+    for _, row in sorted_df.iterrows():
+        st.markdown(f"""
+<div class="update-card">
+  <div class="update-header">
+    <span class="update-by">🧑‍💼 {row.get("Posted By","")}</span>
+    <span class="update-date">{row.get("Date","")}</span>
+  </div>
+  <div class="update-text">{row.get("Update","")}</div>
+</div>""", unsafe_allow_html=True)
+
+def render_summary_bar(ov: dict, kpis: pd.DataFrame, actions: pd.DataFrame):
+    met   = (kpis["Status"] == "Met").sum()    if not kpis.empty else 0
+    total_kpi = len(kpis)
+    done  = (actions["Status"] == "Complete").sum()  if not actions.empty else 0
+    open_ = (actions["Status"] == "Open").sum()      if not actions.empty else 0
+    inprog= (actions["Status"] == "In Progress").sum()if not actions.empty else 0
+    status = ov.get("Status","")
+    arr    = ov.get("Potential ARR ($)","")
+    arr_str = f"${int(arr):,}" if str(arr).isdigit() else (f"${arr}" if arr else "—")
+    chips = [
+        (f"{status_badge(status)}", ""),
+        (f"💰 ARR: {arr_str}", "green"),
+        (f"✅ KPIs Met: {met}/{total_kpi}", "green" if met==total_kpi else ""),
+        (f"📋 Actions: {done} done · {inprog} in progress · {open_} open", "amber" if open_ > 0 else "green"),
+    ]
+    html = '<div class="summary-bar">'
+    for text, cls in chips:
+        html += f'<div class="summary-chip {cls}">{text}</div>'
+    html += '</div>'
+    st.markdown(html, unsafe_allow_html=True)
+
+
 # ── Sidebar — POC selector ────────────────────────────────────────────────────
 registry = load_registry()
 
@@ -255,19 +545,16 @@ updates = load_updates(active_poc_id)
 # ── Page header ───────────────────────────────────────────────────────────────
 customer_name   = active_row.get("Customer", active_poc_id)
 engagement_name = active_row.get("Engagement", "")
-status_badge    = STATUS_EMOJI.get(ov.get("Status", active_row.get("Status", "")), "⚪")
+poc_status_emoji = STATUS_EMOJI.get(ov.get("Status", active_row.get("Status", "")), "⚪")
 
 st.title(f"{customer_name} × Snowflake — POC Tracker")
 if engagement_name:
     st.subheader(engagement_name, divider=False)
-st.caption(
-    f"{ov.get('Business Unit', '—')}  ·  "
-    f"{ov.get('Primary Use Case', '—')}  ·  "
-    f"Status: **{ov.get('Status', active_row.get('Status', 'Not set'))}** {status_badge}"
-)
+
+render_summary_bar(ov, kpis, actions)
 st.divider()
 
-tab0, tab1, tab2, tab3, tab4 = st.tabs(["Sheet View", "Overview", "KPIs & Budget", "Action Plan", "Updates"])
+tab0, tab1, tab2, tab3, tab4 = st.tabs(["📊 Sheet View", "🏢 Overview", "📈 KPIs & Budget", "✅ Action Plan", "📝 Updates"])
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -451,15 +738,15 @@ with tab1:
 # ══════════════════════════════════════════════════════════════════════════════
 with tab2:
 
-    # KPIs table
     st.subheader("KPIs")
     DISPLAY_KPI = [h for h in KPI_HEADERS if h != "POC_ID"]
 
+    # Styled KPI cards
+    render_kpi_cards(kpis)
+
     if not kpis.empty:
-        st.dataframe(kpis, use_container_width=True, hide_index=True)
         st.divider()
         st.markdown("**Update a KPI**")
-        # get sheet rows scoped to this poc
         sheet_rows = get_all_sheet_row("KPIs", active_poc_id)
         for (sheet_row, rec), (df_idx, df_row) in zip(sheet_rows, kpis.iterrows()):
             with st.expander(f"{df_row.get('KPI', '')} — {df_row.get('Status', '')}"):
@@ -486,8 +773,6 @@ with tab2:
                         if st.form_submit_button("Delete"):
                             delete_sheet_row("KPIs", sheet_row)
                             st.rerun()
-    else:
-        st.info("No KPIs defined yet.")
 
     st.divider()
     st.markdown("**Add KPI**")
@@ -513,19 +798,24 @@ with tab2:
 
     st.divider()
 
-    # Budget
+    # Budget — styled metric cards
     st.subheader("Budget & Funding")
-    budget_rows = {
-        "POC Budget ($)":      ov.get("POC Budget ($)"),
-        "Confirmed Spend ($)": ov.get("Confirmed Spend ($)"),
-        "Potential ARR ($)":   ov.get("Potential ARR ($)"),
-        "Procurement Contact": ov.get("Procurement Contact"),
-        "Budget Notes":        ov.get("Budget Notes"),
-    }
-    if any(budget_rows.values()):
-        st.dataframe(pd.DataFrame([(k, v) for k, v in budget_rows.items() if v],
-                                   columns=["Field", "Value"]),
-                     use_container_width=True, hide_index=True)
+    budget_val = ov.get("POC Budget ($)", "")
+    spend_val  = ov.get("Confirmed Spend ($)", "")
+    arr_val    = ov.get("Potential ARR ($)", "")
+    if budget_val or spend_val or arr_val:
+        b1, b2, b3 = st.columns(3)
+        def fmt_money(v):
+            try: return f"${int(v):,}"
+            except: return f"${v}" if v else "—"
+        with b1:
+            st.metric("POC Budget", fmt_money(budget_val))
+        with b2:
+            st.metric("Confirmed Spend", fmt_money(spend_val))
+        with b3:
+            st.metric("Potential ARR", fmt_money(arr_val))
+        if ov.get("Budget Notes"):
+            st.caption(f"📌 {ov['Budget Notes']}")
     else:
         st.info("No budget details entered yet.")
 
@@ -559,8 +849,10 @@ with tab3:
     st.subheader("Mutual Action Plan")
     DISPLAY_ACT = [h for h in ACTION_HEADERS if h != "POC_ID"]
 
+    # Styled action list
+    render_actions(actions)
+
     if not actions.empty:
-        st.dataframe(actions, use_container_width=True, hide_index=True)
         st.divider()
         st.markdown("**Update an Action Item**")
         sheet_rows = get_all_sheet_row("Action_Items", active_poc_id)
@@ -595,8 +887,6 @@ with tab3:
                         if st.form_submit_button("Delete"):
                             delete_sheet_row("Action_Items", sheet_row)
                             st.rerun()
-    else:
-        st.info("No action items yet.")
 
     st.divider()
     st.markdown("**Add Action Item**")
@@ -624,11 +914,11 @@ with tab3:
 with tab4:
     st.subheader("Status Updates")
 
-    if not updates.empty:
-        st.dataframe(updates.sort_values("Date", ascending=False),
-                     use_container_width=True, hide_index=True)
-        st.divider()
+    # Styled update feed
+    render_updates(updates)
 
+    st.divider()
+    st.markdown("**Post a New Update**")
     with st.form("new_update"):
         uf1, uf2 = st.columns([3, 1])
         with uf1:
