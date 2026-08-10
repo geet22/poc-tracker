@@ -187,7 +187,7 @@ except Exception as e:
     st.stop()
 
 # ── Premium CSS injection ─────────────────────────────────────────────────────
-st.markdown("""
+st.html("""
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 html, body, [class*="css"], .stApp { font-family: 'Inter', sans-serif !important; }
@@ -369,7 +369,7 @@ hr { border-color: #E2E8F0 !important; }
 .summary-chip.amber { background:#FFFAF0; border-color:#FBD38D; color:#7B341E; }
 .summary-chip.gray  { background:#F7FAFC; border-color:#CBD5E0; color:#4A5568; }
 </style>
-""", unsafe_allow_html=True)
+""")
 
 
 def status_badge(s: str) -> str:
@@ -406,13 +406,13 @@ def render_kpi_cards(df: pd.DataFrame):
         val  = str(row.get("Current Value","—"))
         unit = str(row.get("Unit",""))
         with cols[i % 3]:
-            st.markdown(f"""
+            st.html(f"""
 <div class="kpi-card {kpi_card_class(s)}">
   <div class="kpi-name">{row.get("KPI","")}</div>
   <div class="kpi-value">{val} <span style="font-size:1rem;font-weight:400;color:#718096">{unit}</span></div>
   <div class="kpi-target">Target: {row.get("Target","—")} {unit}</div>
   {status_badge(s)}
-</div>""", unsafe_allow_html=True)
+</div>""")
 
 def render_actions(df: pd.DataFrame):
     if df.empty:
@@ -423,7 +423,7 @@ def render_actions(df: pd.DataFrame):
         dot   = action_dot_class(s)
         note  = str(row.get("Notes",""))
         note_html = f'<div class="action-note">💬 {note}</div>' if note else ""
-        st.markdown(f"""
+        st.html(f"""
 <div class="action-row">
   <div class="action-dot {dot}"></div>
   <div class="action-body">
@@ -437,7 +437,7 @@ def render_actions(df: pd.DataFrame):
     <div class="action-due">📅 {row.get("Due Date","")}</div>
     {status_badge(s)}
   </div>
-</div>""", unsafe_allow_html=True)
+</div>""")
 
 def render_updates(df: pd.DataFrame):
     if df.empty:
@@ -445,14 +445,14 @@ def render_updates(df: pd.DataFrame):
         return
     sorted_df = df.sort_values("Date", ascending=False)
     for _, row in sorted_df.iterrows():
-        st.markdown(f"""
+        st.html(f"""
 <div class="update-card">
   <div class="update-header">
     <span class="update-by">🧑‍💼 {row.get("Posted By","")}</span>
     <span class="update-date">{row.get("Date","")}</span>
   </div>
   <div class="update-text">{row.get("Update","")}</div>
-</div>""", unsafe_allow_html=True)
+</div>""")
 
 def render_summary_bar(ov: dict, kpis: pd.DataFrame, actions: pd.DataFrame):
     met   = (kpis["Status"] == "Met").sum()    if not kpis.empty else 0
@@ -473,7 +473,7 @@ def render_summary_bar(ov: dict, kpis: pd.DataFrame, actions: pd.DataFrame):
     for text, cls in chips:
         html += f'<div class="summary-chip {cls}">{text}</div>'
     html += '</div>'
-    st.markdown(html, unsafe_allow_html=True)
+    st.html(html)
 
 
 # ── Sidebar — POC selector ────────────────────────────────────────────────────
