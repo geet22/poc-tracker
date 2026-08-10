@@ -4,6 +4,17 @@ from google.oauth2.service_account import Credentials
 import pandas as pd
 from datetime import datetime, date
 import uuid
+import time
+
+def _retry(fn, retries=3, wait=8):
+    for attempt in range(retries):
+        try:
+            return fn()
+        except gspread.exceptions.APIError as e:
+            if "429" in str(e) and attempt < retries - 1:
+                time.sleep(wait * (attempt + 1))
+            else:
+                raise
 
 st.set_page_config(page_title="Snowflake POC Tracker", layout="wide")
 
@@ -63,9 +74,11 @@ def get_client():
     creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=SCOPES)
     return gspread.authorize(creds)
 
+@st.cache_resource
 def get_ss():
     return get_client().open_by_key(st.secrets["spreadsheet_id"])
 
+@st.cache_resource
 def ensure_sheets():
     ss = get_ss()
     existing = {ws.title for ws in ss.worksheets()}
@@ -85,7 +98,7 @@ def ensure_sheets():
                 ws.insert_row(headers, 1)
 
 # ── Load functions ────────────────────────────────────────────────────────────
-@st.cache_data(ttl=20)
+@st.cache_data(ttl=300)
 def load_registry() -> pd.DataFrame:
     ws = get_ss().worksheet("POC_Registry")
     data = ws.get_all_records()
@@ -93,7 +106,7 @@ def load_registry() -> pd.DataFrame:
         return pd.DataFrame(data)
     return pd.DataFrame(columns=REGISTRY_HEADERS)
 
-@st.cache_data(ttl=20)
+@st.cache_data(ttl=300)
 def load_overview(poc_id: str) -> dict:
     ws = get_ss().worksheet("Overview")
     rows = ws.get_all_records(expected_headers=OVERVIEW_HEADERS)
@@ -102,7 +115,7 @@ def load_overview(poc_id: str) -> dict:
             return r
     return {}
 
-@st.cache_data(ttl=20)
+@st.cache_data(ttl=300)
 def load_kpis(poc_id: str) -> pd.DataFrame:
     ws = get_ss().worksheet("KPIs")
     data = ws.get_all_records()
@@ -111,7 +124,7 @@ def load_kpis(poc_id: str) -> pd.DataFrame:
         df = df[df["POC_ID"] == poc_id].drop(columns=["POC_ID"])
     return df
 
-@st.cache_data(ttl=20)
+@st.cache_data(ttl=300)
 def load_actions(poc_id: str) -> pd.DataFrame:
     ws = get_ss().worksheet("Action_Items")
     data = ws.get_all_records()
@@ -120,7 +133,7 @@ def load_actions(poc_id: str) -> pd.DataFrame:
         df = df[df["POC_ID"] == poc_id].drop(columns=["POC_ID"])
     return df
 
-@st.cache_data(ttl=20)
+@st.cache_data(ttl=300)
 def load_updates(poc_id: str) -> pd.DataFrame:
     ws = get_ss().worksheet("Updates")
     data = ws.get_all_records()
@@ -195,7 +208,7 @@ def get_all_sheet_row(sheet: str, poc_id: str) -> list[tuple[int, dict]]:
 
 # ── Bootstrap ─────────────────────────────────────────────────────────────────
 try:
-    ensure_sheets()
+    _retry(ensure_sheets)
 except Exception as e:
     st.error(f"Could not connect to Google Sheets: {e}")
     st.stop()
