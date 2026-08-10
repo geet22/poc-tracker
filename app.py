@@ -165,6 +165,20 @@ def create_poc(poc_id: str, customer: str, engagement: str, ae: str, se: str, st
     ws.append_row([poc_id, customer, engagement, ae, se, status, datetime.today().strftime("%Y-%m-%d")])
     st.cache_data.clear()
 
+def save_all_rows(sheet: str, poc_id: str, display_headers: list, edited_df: pd.DataFrame):
+    """Replace all rows for poc_id in a sheet with the edited dataframe."""
+    ws = get_ss().worksheet(sheet)
+    all_vals = ws.get_all_values()
+    to_delete = [i + 2 for i, r in enumerate(all_vals[1:]) if r and r[0] == poc_id]
+    for row_num in reversed(to_delete):
+        ws.delete_rows(row_num)
+    for _, row in edited_df.iterrows():
+        ws.append_row(
+            [poc_id] + [str(row.get(h, "")) for h in display_headers],
+            value_input_option="USER_ENTERED",
+        )
+    st.cache_data.clear()
+
 def get_all_sheet_row(sheet: str, poc_id: str) -> list[tuple[int, dict]]:
     """Return (sheet_row_number, record) pairs for a given poc_id."""
     ws = get_ss().worksheet(sheet)
@@ -483,6 +497,24 @@ with st.sidebar:
     st.markdown("## 🏢 POC Tracker")
     st.divider()
 
+    # ── Editor identity ───────────────────────────────────
+    if "editor_name" not in st.session_state:
+        st.session_state["editor_name"] = ""
+    if "editor_role" not in st.session_state:
+        st.session_state["editor_role"] = "Snowflake Team"
+
+    st.markdown("**Editing as**")
+    st.session_state["editor_name"] = st.text_input(
+        "Your name", value=st.session_state["editor_name"],
+        placeholder="e.g. Geet Sukhmani", label_visibility="collapsed"
+    )
+    st.session_state["editor_role"] = st.radio(
+        "Role", ["Snowflake Team", "Customer"],
+        index=0 if st.session_state["editor_role"] == "Snowflake Team" else 1,
+        horizontal=True, label_visibility="collapsed"
+    )
+    st.divider()
+
     if registry.empty:
         st.info("No POCs yet. Create one below.")
         poc_options = []
@@ -603,330 +635,234 @@ with tab0:
 # TAB 1 — OVERVIEW
 # ══════════════════════════════════════════════════════════════════════════════
 with tab1:
-    if ov:
-        col1, col2 = st.columns(2)
-        with col1:
-            st.subheader("Engagement")
-            for k, v in {
-                "Business Unit":     ov.get("Business Unit"),
-                "Primary Use Case":  ov.get("Primary Use Case"),
-                "Secondary Use Case":ov.get("Secondary Use Case"),
-                "Cloud Environment": ov.get("Cloud Environment"),
-                "Current Platform":  ov.get("Current Data Platform"),
-                "Data Volume":       ov.get("Data Volume"),
-                "Compliance":        ov.get("Compliance Requirements"),
-                "POC Start":         ov.get("POC Start Date"),
-                "Target Completion": ov.get("Target Completion Date"),
-                "Status":            ov.get("Status"),
-            }.items():
-                if v:
-                    st.markdown(f"**{k}:** {v}")
+    editor_name = st.session_state.get("editor_name", "")
+    editor_role = st.session_state.get("editor_role", "Snowflake Team")
 
-        with col2:
-            st.subheader("Contacts")
-            for k, v in {
-                "Snowflake AE":      ov.get("Snowflake AE"),
-                "Snowflake SE":      ov.get("Snowflake SE"),
-                "Champion":          ov.get("Labcorp Champion"),
-                "Champion Title":    ov.get("Champion Title"),
-                "Champion Email":    ov.get("Champion Email"),
-                "Exec Sponsor":      ov.get("Executive Sponsor"),
-                "Sponsor Title":     ov.get("Sponsor Title"),
-            }.items():
-                if v:
-                    st.markdown(f"**{k}:** {v}")
+    with st.form("overview_form"):
+        st.markdown("### Contacts")
+        sf_col, cust_col = st.columns(2)
 
-        if ov.get("POC Objective"):
-            st.divider()
-            st.subheader("POC Objective")
-            st.write(ov["POC Objective"])
+        with sf_col:
+            st.markdown("**🔵 Snowflake Team**")
+            ae = st.text_input("Account Executive", value=ov.get("Snowflake AE", ""))
+            se = st.text_input("Solutions Engineer", value=ov.get("Snowflake SE", ""))
 
-        c1, c2 = st.columns(2)
-        with c1:
-            if ov.get("Technical Success Criteria"):
-                st.subheader("Technical Success Criteria")
-                st.write(ov["Technical Success Criteria"])
-        with c2:
-            if ov.get("Business Success Criteria"):
-                st.subheader("Business Success Criteria")
-                st.write(ov["Business Success Criteria"])
+        with cust_col:
+            st.markdown("**🟢 Customer Contacts**")
+            champion    = st.text_input("Champion Name",          value=ov.get("Labcorp Champion", ""))
+            champ_title = st.text_input("Champion Title",         value=ov.get("Champion Title", ""))
+            champ_email = st.text_input("Champion Email",         value=ov.get("Champion Email", ""))
+            sponsor     = st.text_input("Executive Sponsor",      value=ov.get("Executive Sponsor", ""))
+            sponsor_title = st.text_input("Exec Sponsor Title",   value=ov.get("Sponsor Title", ""))
 
         st.divider()
+        st.markdown("### Engagement Details")
+        e1, e2 = st.columns(2)
+        with e1:
+            bu  = st.selectbox("Business Unit", BUSINESS_UNITS,
+                               index=BUSINESS_UNITS.index(ov["Business Unit"]) if ov.get("Business Unit") in BUSINESS_UNITS else 0)
+            uc  = st.selectbox("Primary Use Case", USE_CASES,
+                               index=USE_CASES.index(ov["Primary Use Case"]) if ov.get("Primary Use Case") in USE_CASES else 0)
+            uc2 = st.selectbox("Secondary Use Case", USE_CASES,
+                               index=USE_CASES.index(ov["Secondary Use Case"]) if ov.get("Secondary Use Case") in USE_CASES else 0)
+        with e2:
+            cloud    = st.selectbox("Cloud Environment", CLOUD_OPTIONS,
+                                    index=CLOUD_OPTIONS.index(ov["Cloud Environment"]) if ov.get("Cloud Environment") in CLOUD_OPTIONS else 0)
+            platform = st.text_input("Current Data Platform", value=ov.get("Current Data Platform", ""))
+            volume   = st.text_input("Estimated Data Volume",  value=ov.get("Data Volume", ""))
 
-    with st.expander("Edit Overview", expanded=not bool(ov)):
-        with st.form("overview_form"):
-            st.markdown("**Snowflake Team**")
-            f1, f2 = st.columns(2)
-            with f1:
-                ae = st.text_input("Account Executive", value=ov.get("Snowflake AE", ""))
-            with f2:
-                se = st.text_input("Solutions Engineer", value=ov.get("Snowflake SE", ""))
+        saved_compliance = [c.strip() for c in ov.get("Compliance Requirements", "").split(",") if c.strip()]
+        compliance = st.multiselect("Compliance Requirements", COMPLIANCE_OPTIONS,
+                                    default=[c for c in saved_compliance if c in COMPLIANCE_OPTIONS])
 
-            st.markdown("**Customer Contacts**")
-            f3, f4 = st.columns(2)
-            with f3:
-                champion      = st.text_input("Champion Name",   value=ov.get("Labcorp Champion", ""))
-                champ_title   = st.text_input("Champion Title",  value=ov.get("Champion Title", ""))
-                champ_email   = st.text_input("Champion Email",  value=ov.get("Champion Email", ""))
-            with f4:
-                sponsor       = st.text_input("Executive Sponsor",       value=ov.get("Executive Sponsor", ""))
-                sponsor_title = st.text_input("Executive Sponsor Title", value=ov.get("Sponsor Title", ""))
+        st.divider()
+        st.markdown("### Timeline & Status")
+        t1, t2, t3 = st.columns(3)
+        with t1:
+            try:    start_val = datetime.strptime(ov.get("POC Start Date", ""), "%Y-%m-%d").date()
+            except: start_val = date.today()
+            start_date = st.date_input("POC Start Date", value=start_val)
+        with t2:
+            try:    end_val = datetime.strptime(ov.get("Target Completion Date", ""), "%Y-%m-%d").date()
+            except: end_val = date.today()
+            end_date = st.date_input("Target Completion Date", value=end_val)
+        with t3:
+            status = st.selectbox("POC Status", STATUS_OPTIONS,
+                                  index=STATUS_OPTIONS.index(ov["Status"]) if ov.get("Status") in STATUS_OPTIONS else 0)
 
-            st.markdown("**Engagement Details**")
-            f5, f6 = st.columns(2)
-            with f5:
-                bu  = st.selectbox("Business Unit",     BUSINESS_UNITS,
-                                   index=BUSINESS_UNITS.index(ov["Business Unit"]) if ov.get("Business Unit") in BUSINESS_UNITS else 0)
-                uc  = st.selectbox("Primary Use Case",  USE_CASES,
-                                   index=USE_CASES.index(ov["Primary Use Case"]) if ov.get("Primary Use Case") in USE_CASES else 0)
-                uc2 = st.selectbox("Secondary Use Case",USE_CASES,
-                                   index=USE_CASES.index(ov["Secondary Use Case"]) if ov.get("Secondary Use Case") in USE_CASES else 0)
-            with f6:
-                cloud    = st.selectbox("Cloud Environment", CLOUD_OPTIONS,
-                                        index=CLOUD_OPTIONS.index(ov["Cloud Environment"]) if ov.get("Cloud Environment") in CLOUD_OPTIONS else 0)
-                platform = st.text_input("Current Data Platform", value=ov.get("Current Data Platform", ""))
-                volume   = st.text_input("Estimated Data Volume",  value=ov.get("Data Volume", ""))
+        st.divider()
+        st.markdown("### Objectives & Success Criteria")
+        objective = st.text_area("POC Objective", value=ov.get("POC Objective", ""), height=90)
+        sc1, sc2 = st.columns(2)
+        with sc1:
+            tech_criteria = st.text_area("Technical Success Criteria", value=ov.get("Technical Success Criteria", ""), height=100)
+        with sc2:
+            biz_criteria  = st.text_area("Business Success Criteria",  value=ov.get("Business Success Criteria", ""),  height=100)
 
-            saved_compliance = [c.strip() for c in ov.get("Compliance Requirements", "").split(",") if c.strip()]
-            compliance = st.multiselect("Compliance Requirements", COMPLIANCE_OPTIONS,
-                                        default=[c for c in saved_compliance if c in COMPLIANCE_OPTIONS])
+        st.divider()
+        st.markdown("### Budget & Funding")
+        b1, b2, b3 = st.columns(3)
+        with b1: poc_budget = st.text_input("POC Budget ($)",      value=ov.get("POC Budget ($)", ""))
+        with b2: conf_spend = st.text_input("Confirmed Spend ($)", value=ov.get("Confirmed Spend ($)", ""))
+        with b3: arr        = st.text_input("Potential ARR ($)",   value=ov.get("Potential ARR ($)", ""))
+        proc_contact = st.text_input("Procurement Contact", value=ov.get("Procurement Contact", ""))
+        budget_notes = st.text_area("Budget Notes",         value=ov.get("Budget Notes", ""), height=60)
 
-            st.markdown("**Timeline & Status**")
-            f7, f8, f9 = st.columns(3)
-            with f7:
-                try:    start_val = datetime.strptime(ov.get("POC Start Date", ""), "%Y-%m-%d").date()
-                except: start_val = date.today()
-                start_date = st.date_input("POC Start Date", value=start_val)
-            with f8:
-                try:    end_val = datetime.strptime(ov.get("Target Completion Date", ""), "%Y-%m-%d").date()
-                except: end_val = date.today()
-                end_date = st.date_input("Target Completion Date", value=end_val)
-            with f9:
-                status = st.selectbox("POC Status", STATUS_OPTIONS,
-                                      index=STATUS_OPTIONS.index(ov["Status"]) if ov.get("Status") in STATUS_OPTIONS else 0)
-
-            objective     = st.text_area("POC Objective",              value=ov.get("POC Objective", ""), height=80)
-            fa, fb = st.columns(2)
-            with fa:
-                tech_criteria = st.text_area("Technical Success Criteria", value=ov.get("Technical Success Criteria", ""), height=90)
-            with fb:
-                biz_criteria  = st.text_area("Business Success Criteria",  value=ov.get("Business Success Criteria", ""),  height=90)
-
-            if st.form_submit_button("Save Overview", type="primary"):
-                save_overview(active_poc_id, {
-                    "Snowflake AE": ae, "Snowflake SE": se,
-                    "Labcorp Champion": champion, "Champion Title": champ_title, "Champion Email": champ_email,
-                    "Executive Sponsor": sponsor, "Sponsor Title": sponsor_title,
-                    "Business Unit": bu, "Primary Use Case": uc, "Secondary Use Case": uc2,
-                    "Cloud Environment": cloud, "Current Data Platform": platform, "Data Volume": volume,
-                    "Compliance Requirements": ", ".join(compliance),
-                    "POC Start Date": str(start_date), "Target Completion Date": str(end_date),
-                    "Status": status, "POC Objective": objective,
-                    "Technical Success Criteria": tech_criteria, "Business Success Criteria": biz_criteria,
-                    "POC Budget ($)": ov.get("POC Budget ($)", ""),
-                    "Confirmed Spend ($)": ov.get("Confirmed Spend ($)", ""),
-                    "Potential ARR ($)": ov.get("Potential ARR ($)", ""),
-                    "Procurement Contact": ov.get("Procurement Contact", ""),
-                    "Budget Notes": ov.get("Budget Notes", ""),
-                })
-                st.success("Saved.")
-                st.rerun()
+        submitted = st.form_submit_button("💾  Save Overview", type="primary", use_container_width=True)
+        if submitted:
+            save_overview(active_poc_id, {
+                "Snowflake AE": ae, "Snowflake SE": se,
+                "Labcorp Champion": champion, "Champion Title": champ_title, "Champion Email": champ_email,
+                "Executive Sponsor": sponsor, "Sponsor Title": sponsor_title,
+                "Business Unit": bu, "Primary Use Case": uc, "Secondary Use Case": uc2,
+                "Cloud Environment": cloud, "Current Data Platform": platform, "Data Volume": volume,
+                "Compliance Requirements": ", ".join(compliance),
+                "POC Start Date": str(start_date), "Target Completion Date": str(end_date),
+                "Status": status, "POC Objective": objective,
+                "Technical Success Criteria": tech_criteria, "Business Success Criteria": biz_criteria,
+                "POC Budget ($)": poc_budget, "Confirmed Spend ($)": conf_spend,
+                "Potential ARR ($)": arr, "Procurement Contact": proc_contact,
+                "Budget Notes": budget_notes,
+            })
+            st.success(f"Saved by {editor_name or editor_role}.")
+            st.rerun()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 2 — KPIs & BUDGET
 # ══════════════════════════════════════════════════════════════════════════════
 with tab2:
-
-    st.subheader("KPIs")
     DISPLAY_KPI = [h for h in KPI_HEADERS if h != "POC_ID"]
 
-    # Styled KPI cards
-    render_kpi_cards(kpis)
+    st.subheader("KPIs")
+    st.caption("Edit any cell directly, then click **Save KPIs** to write to the sheet.")
 
-    if not kpis.empty:
-        st.divider()
-        st.markdown("**Update a KPI**")
-        sheet_rows = get_all_sheet_row("KPIs", active_poc_id)
-        for (sheet_row, rec), (df_idx, df_row) in zip(sheet_rows, kpis.iterrows()):
-            with st.expander(f"{df_row.get('KPI', '')} — {df_row.get('Status', '')}"):
-                with st.form(f"kpi_edit_{df_idx}"):
-                    kc1, kc2 = st.columns(2)
-                    with kc1:
-                        kpi_name = st.text_input("KPI",    value=df_row.get("KPI", ""))
-                        target   = st.text_input("Target", value=str(df_row.get("Target", "")))
-                        unit     = st.text_input("Unit",   value=df_row.get("Unit", ""))
-                    with kc2:
-                        current  = st.text_input("Current Value", value=str(df_row.get("Current Value", "")))
-                        ks_idx   = KPI_STATUSES.index(df_row["Status"]) if df_row.get("Status") in KPI_STATUSES else 0
-                        k_status = st.selectbox("Status", KPI_STATUSES, index=ks_idx)
-                        k_note   = st.text_input("Notes",  value=df_row.get("Notes", ""))
-                    sc1, sc2 = st.columns([4, 1])
-                    with sc1:
-                        if st.form_submit_button("Update", type="primary"):
-                            update_sheet_row("KPIs", active_poc_id, sheet_row, DISPLAY_KPI,
-                                             {"KPI": kpi_name, "Target": target, "Current Value": current,
-                                              "Unit": unit, "Status": k_status, "Notes": k_note})
-                            st.success("Updated.")
-                            st.rerun()
-                    with sc2:
-                        if st.form_submit_button("Delete"):
-                            delete_sheet_row("KPIs", sheet_row)
-                            st.rerun()
+    kpi_edit_df = kpis.copy() if not kpis.empty else pd.DataFrame(columns=DISPLAY_KPI)
+    # Ensure all columns exist
+    for col in DISPLAY_KPI:
+        if col not in kpi_edit_df.columns:
+            kpi_edit_df[col] = ""
+    kpi_edit_df = kpi_edit_df[DISPLAY_KPI]
 
-    st.divider()
-    st.markdown("**Add KPI**")
-    with st.form("new_kpi"):
-        nk1, nk2, nk3 = st.columns(3)
-        with nk1:
-            nk_name   = st.text_input("KPI *")
-            nk_target = st.text_input("Target")
-            nk_unit   = st.text_input("Unit")
-        with nk2:
-            nk_current = st.text_input("Current Value")
-            nk_status  = st.selectbox("Status", KPI_STATUSES)
-        with nk3:
-            nk_note = st.text_area("Notes", height=108)
-        if st.form_submit_button("Add KPI", type="primary"):
-            if nk_name.strip():
-                append_to("KPIs", active_poc_id,
-                          [nk_name.strip(), nk_target, nk_current, nk_unit, nk_status, nk_note])
-                st.success("Added.")
-                st.rerun()
-            else:
-                st.warning("KPI name required.")
+    edited_kpis = st.data_editor(
+        kpi_edit_df,
+        num_rows="dynamic",
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "KPI":           st.column_config.TextColumn("KPI", width="large"),
+            "Target":        st.column_config.TextColumn("Target"),
+            "Current Value": st.column_config.TextColumn("Current Value"),
+            "Unit":          st.column_config.TextColumn("Unit"),
+            "Status":        st.column_config.SelectboxColumn("Status", options=KPI_STATUSES),
+            "Notes":         st.column_config.TextColumn("Notes", width="large"),
+        },
+        key="kpi_editor",
+    )
+
+    if st.button("💾  Save KPIs", type="primary", key="save_kpis"):
+        clean = edited_kpis.dropna(how="all")
+        clean = clean[clean["KPI"].astype(str).str.strip() != ""]
+        save_all_rows("KPIs", active_poc_id, DISPLAY_KPI, clean)
+        st.success(f"KPIs saved by {st.session_state.get('editor_name') or st.session_state.get('editor_role','')}")
+        st.rerun()
 
     st.divider()
 
-    # Budget — styled metric cards
+    # Budget — always visible, no expander
     st.subheader("Budget & Funding")
-    budget_val = ov.get("POC Budget ($)", "")
-    spend_val  = ov.get("Confirmed Spend ($)", "")
-    arr_val    = ov.get("Potential ARR ($)", "")
-    if budget_val or spend_val or arr_val:
-        b1, b2, b3 = st.columns(3)
-        def fmt_money(v):
-            try: return f"${int(v):,}"
-            except: return f"${v}" if v else "—"
-        with b1:
-            st.metric("POC Budget", fmt_money(budget_val))
-        with b2:
-            st.metric("Confirmed Spend", fmt_money(spend_val))
-        with b3:
-            st.metric("Potential ARR", fmt_money(arr_val))
-        if ov.get("Budget Notes"):
-            st.caption(f"📌 {ov['Budget Notes']}")
-    else:
-        st.info("No budget details entered yet.")
 
-    with st.expander("Edit Budget Details"):
-        with st.form("budget_form"):
-            bf1, bf2, bf3 = st.columns(3)
-            with bf1:
-                poc_budget = st.text_input("POC Budget ($)",      value=ov.get("POC Budget ($)", ""))
-            with bf2:
-                conf_spend = st.text_input("Confirmed Spend ($)", value=ov.get("Confirmed Spend ($)", ""))
-            with bf3:
-                arr        = st.text_input("Potential ARR ($)",   value=ov.get("Potential ARR ($)", ""))
-            proc_contact = st.text_input("Procurement Contact", value=ov.get("Procurement Contact", ""))
-            budget_notes = st.text_area("Budget Notes",         value=ov.get("Budget Notes", ""), height=80)
-            if st.form_submit_button("Save Budget", type="primary"):
-                updated = dict(ov)
-                updated.update({
-                    "POC Budget ($)": poc_budget, "Confirmed Spend ($)": conf_spend,
-                    "Potential ARR ($)": arr, "Procurement Contact": proc_contact,
-                    "Budget Notes": budget_notes,
-                })
-                save_overview(active_poc_id, updated)
-                st.success("Saved.")
-                st.rerun()
+    def fmt_money(v):
+        try: return f"${int(v):,}"
+        except: return f"${v}" if v else "—"
+
+    bm1, bm2, bm3 = st.columns(3)
+    with bm1: st.metric("POC Budget",      fmt_money(ov.get("POC Budget ($)", "")))
+    with bm2: st.metric("Confirmed Spend", fmt_money(ov.get("Confirmed Spend ($)", "")))
+    with bm3: st.metric("Potential ARR",   fmt_money(ov.get("Potential ARR ($)", "")))
+    if ov.get("Budget Notes"):
+        st.caption(f"📌 {ov['Budget Notes']}")
+
+    st.markdown("**Edit Budget**")
+    with st.form("budget_form"):
+        bf1, bf2, bf3 = st.columns(3)
+        with bf1: poc_budget = st.text_input("POC Budget ($)",      value=ov.get("POC Budget ($)", ""))
+        with bf2: conf_spend = st.text_input("Confirmed Spend ($)", value=ov.get("Confirmed Spend ($)", ""))
+        with bf3: arr_v      = st.text_input("Potential ARR ($)",   value=ov.get("Potential ARR ($)", ""))
+        proc_contact = st.text_input("Procurement Contact", value=ov.get("Procurement Contact", ""))
+        budget_notes = st.text_area("Budget Notes",         value=ov.get("Budget Notes", ""), height=60)
+        if st.form_submit_button("💾  Save Budget", type="primary"):
+            updated = dict(ov)
+            updated.update({"POC Budget ($)": poc_budget, "Confirmed Spend ($)": conf_spend,
+                            "Potential ARR ($)": arr_v, "Procurement Contact": proc_contact,
+                            "Budget Notes": budget_notes})
+            save_overview(active_poc_id, updated)
+            st.success("Budget saved.")
+            st.rerun()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 3 — ACTION PLAN
 # ══════════════════════════════════════════════════════════════════════════════
 with tab3:
-    st.subheader("Mutual Action Plan")
     DISPLAY_ACT = [h for h in ACTION_HEADERS if h != "POC_ID"]
 
-    # Styled action list
-    render_actions(actions)
+    st.subheader("Mutual Action Plan")
+    st.caption("Edit status, owner, or notes directly in the table, then click **Save Actions**.")
 
-    if not actions.empty:
-        st.divider()
-        st.markdown("**Update an Action Item**")
-        sheet_rows = get_all_sheet_row("Action_Items", active_poc_id)
-        for (sheet_row, rec), (df_idx, df_row) in zip(sheet_rows, actions.iterrows()):
-            label = f"{df_row.get('Action', '')} — {df_row.get('Owner', '')} — {df_row.get('Status', '')}"
-            with st.expander(label):
-                with st.form(f"action_edit_{df_idx}"):
-                    action_text = st.text_input("Action", value=df_row.get("Action", ""))
-                    ac1, ac2, ac3 = st.columns(3)
-                    with ac1:
-                        owner = st.selectbox("Owner", ACTION_OWNERS,
-                                             index=ACTION_OWNERS.index(df_row["Owner"]) if df_row.get("Owner") in ACTION_OWNERS else 0)
-                    with ac2:
-                        cat   = st.selectbox("Category", ACTION_CATS,
-                                             index=ACTION_CATS.index(df_row["Category"]) if df_row.get("Category") in ACTION_CATS else 0)
-                    with ac3:
-                        a_st  = st.selectbox("Status", ACTION_STATUSES,
-                                             index=ACTION_STATUSES.index(df_row["Status"]) if df_row.get("Status") in ACTION_STATUSES else 0)
-                    try:    due_val = datetime.strptime(df_row.get("Due Date", ""), "%Y-%m-%d").date()
-                    except: due_val = date.today()
-                    due  = st.date_input("Due Date", value=due_val, key=f"due_{df_idx}")
-                    note = st.text_input("Notes", value=df_row.get("Notes", ""))
-                    sc1, sc2 = st.columns([4, 1])
-                    with sc1:
-                        if st.form_submit_button("Update", type="primary"):
-                            update_sheet_row("Action_Items", active_poc_id, sheet_row, DISPLAY_ACT,
-                                             {"Action": action_text, "Owner": owner, "Category": cat,
-                                              "Due Date": str(due), "Status": a_st, "Notes": note})
-                            st.success("Updated.")
-                            st.rerun()
-                    with sc2:
-                        if st.form_submit_button("Delete"):
-                            delete_sheet_row("Action_Items", sheet_row)
-                            st.rerun()
+    act_edit_df = actions.copy() if not actions.empty else pd.DataFrame(columns=DISPLAY_ACT)
+    for col in DISPLAY_ACT:
+        if col not in act_edit_df.columns:
+            act_edit_df[col] = ""
+    act_edit_df = act_edit_df[DISPLAY_ACT]
+
+    edited_actions = st.data_editor(
+        act_edit_df,
+        num_rows="dynamic",
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Action":   st.column_config.TextColumn("Action", width="large"),
+            "Owner":    st.column_config.SelectboxColumn("Owner",    options=ACTION_OWNERS),
+            "Category": st.column_config.SelectboxColumn("Category", options=ACTION_CATS),
+            "Due Date": st.column_config.TextColumn("Due Date", help="YYYY-MM-DD"),
+            "Status":   st.column_config.SelectboxColumn("Status",   options=ACTION_STATUSES),
+            "Notes":    st.column_config.TextColumn("Notes", width="large"),
+        },
+        key="action_editor",
+    )
+
+    if st.button("💾  Save Actions", type="primary", key="save_actions"):
+        clean = edited_actions.dropna(how="all")
+        clean = clean[clean["Action"].astype(str).str.strip() != ""]
+        save_all_rows("Action_Items", active_poc_id, DISPLAY_ACT, clean)
+        st.success(f"Actions saved by {st.session_state.get('editor_name') or st.session_state.get('editor_role','')}")
+        st.rerun()
 
     st.divider()
-    st.markdown("**Add Action Item**")
-    with st.form("new_action"):
-        new_text = st.text_input("Action *")
-        na1, na2, na3, na4 = st.columns(4)
-        with na1: new_owner  = st.selectbox("Owner",    ACTION_OWNERS)
-        with na2: new_cat    = st.selectbox("Category", ACTION_CATS)
-        with na3: new_due    = st.date_input("Due Date", value=date.today())
-        with na4: new_status = st.selectbox("Status",   ACTION_STATUSES)
-        new_note = st.text_input("Notes (optional)")
-        if st.form_submit_button("Add", type="primary"):
-            if new_text.strip():
-                append_to("Action_Items", active_poc_id,
-                          [new_text.strip(), new_owner, new_cat, str(new_due), new_status, new_note])
-                st.success("Added.")
-                st.rerun()
-            else:
-                st.warning("Action text required.")
+    st.markdown("**Styled view**")
+    render_actions(actions)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 4 — UPDATES
 # ══════════════════════════════════════════════════════════════════════════════
 with tab4:
-    st.subheader("Status Updates")
+    st.subheader("Post a New Update")
 
-    # Styled update feed
-    render_updates(updates)
+    editor_name_upd = st.session_state.get("editor_name", "")
+    editor_role_upd = st.session_state.get("editor_role", "Snowflake Team")
 
-    st.divider()
-    st.markdown("**Post a New Update**")
     with st.form("new_update"):
-        uf1, uf2 = st.columns([3, 1])
+        update_text = st.text_area("Update *", height=110,
+                                   placeholder="Key outcomes, decisions, blockers, or next steps…")
+        uf1, uf2 = st.columns([2, 1])
         with uf1:
-            update_text = st.text_area("Update *", height=100,
-                                       placeholder="Key outcomes, decisions, blockers, or next steps…")
+            posted_by = st.text_input("Posted by *",
+                                      value=f"{editor_name_upd} ({editor_role_upd})" if editor_name_upd else editor_role_upd)
         with uf2:
-            posted_by = st.text_input("Posted by *")
-        if st.form_submit_button("Post Update", type="primary"):
+            st.markdown(" ")
+        if st.form_submit_button("📤  Post Update", type="primary", use_container_width=True):
             if update_text.strip() and posted_by.strip():
                 append_to("Updates", active_poc_id,
                           [datetime.today().strftime("%Y-%m-%d %H:%M"), update_text.strip(), posted_by.strip()])
@@ -934,3 +870,7 @@ with tab4:
                 st.rerun()
             else:
                 st.warning("Both fields are required.")
+
+    st.divider()
+    st.subheader("Update History")
+    render_updates(updates)
