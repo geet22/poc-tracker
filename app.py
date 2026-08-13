@@ -29,10 +29,10 @@ REGISTRY_HEADERS = ["POC_ID", "Customer", "Engagement", "AE", "SE", "Status", "C
 OVERVIEW_HEADERS = [
     "POC_ID",
     "Snowflake AE", "Snowflake SE",
-    "Labcorp Champion", "Champion Title", "Champion Email",
-    "Executive Sponsor", "Sponsor Title",
+    "Technical Champion", "Technical Champion Title",
+    "Exec Business Sponsor", "Exec Business Sponsor Title",
     "Customer Participants",
-    "Business Unit", "Primary Use Case", "Secondary Use Case",
+    "Business Unit",
     "Cloud Environment", "Current Data Platform", "Data Volume",
     "Compliance Requirements",
     "POC Start Date", "Target Completion Date", "Status",
@@ -46,16 +46,6 @@ ACTION_HEADERS   = ["POC_ID", "Action", "Assignee", "Category", "Due Date", "Sta
 AUDIENCE_HEADERS = ["POC_ID", "Name", "Company", "Role", "Email"]
 TIMELINE_HEADERS = ["POC_ID", "Milestone", "Due Date", "Owner", "Status", "Notes"]
 
-USE_CASES = [
-    "Real-World Evidence (RWE)",
-    "Clinical Data Analytics",
-    "Genomics & Next-Gen Sequencing",
-    "Data Sharing with Pharma Partners",
-    "Lab Results Platform Modernisation",
-    "Clinical Trial Data Management",
-    "Regulatory & Compliance Reporting",
-    "Other",
-]
 BUSINESS_UNITS     = ["Diagnostics", "Drug Development (Biopharma Solutions)", "Genomics", "Technology Solutions", "Enterprise / Cross-BU"]
 COMPLIANCE_OPTIONS = ["HIPAA", "21 CFR Part 11", "GxP", "SOC 2", "CLIA", "GDPR"]
 STATUS_OPTIONS     = ["Planning", "Active", "At Risk", "Completed — Won", "Completed — Lost"]
@@ -550,11 +540,10 @@ with tab1:
 
         with cust_col:
             st.markdown("**🟢 Customer Contacts**")
-            champion    = st.text_input("Champion Name",          value=ov.get("Labcorp Champion", ""))
-            champ_title = st.text_input("Champion Title",         value=ov.get("Champion Title", ""))
-            champ_email = st.text_input("Champion Email",         value=ov.get("Champion Email", ""))
-            sponsor     = st.text_input("Executive Sponsor",      value=ov.get("Executive Sponsor", ""))
-            sponsor_title = st.text_input("Exec Sponsor Title",   value=ov.get("Sponsor Title", ""))
+            champion      = st.text_input("Technical Champion",            value=ov.get("Technical Champion", ""))
+            champ_title   = st.text_input("Technical Champion Title",      value=ov.get("Technical Champion Title", ""))
+            sponsor       = st.text_input("Exec Business Sponsor",         value=ov.get("Exec Business Sponsor", ""))
+            sponsor_title = st.text_input("Exec Business Sponsor Title",   value=ov.get("Exec Business Sponsor Title", ""))
 
         participants = st.text_area(
             "Customer Participants",
@@ -567,12 +556,8 @@ with tab1:
         st.markdown("### Engagement Details")
         e1, e2 = st.columns(2)
         with e1:
-            bu  = st.selectbox("Business Unit", BUSINESS_UNITS,
+            bu = st.selectbox("Business Unit", BUSINESS_UNITS,
                                index=BUSINESS_UNITS.index(ov["Business Unit"]) if ov.get("Business Unit") in BUSINESS_UNITS else 0)
-            uc  = st.selectbox("Primary Use Case", USE_CASES,
-                               index=USE_CASES.index(ov["Primary Use Case"]) if ov.get("Primary Use Case") in USE_CASES else 0)
-            uc2 = st.selectbox("Secondary Use Case", USE_CASES,
-                               index=USE_CASES.index(ov["Secondary Use Case"]) if ov.get("Secondary Use Case") in USE_CASES else 0)
         with e2:
             cloud    = st.selectbox("Cloud Environment", CLOUD_OPTIONS,
                                     index=CLOUD_OPTIONS.index(ov["Cloud Environment"]) if ov.get("Cloud Environment") in CLOUD_OPTIONS else 0)
@@ -617,10 +602,10 @@ with tab1:
         if submitted:
             save_overview(active_poc_id, {
                 "Snowflake AE": ae, "Snowflake SE": se,
-                "Labcorp Champion": champion, "Champion Title": champ_title, "Champion Email": champ_email,
-                "Executive Sponsor": sponsor, "Sponsor Title": sponsor_title,
+                "Technical Champion": champion, "Technical Champion Title": champ_title,
+                "Exec Business Sponsor": sponsor, "Exec Business Sponsor Title": sponsor_title,
                 "Customer Participants": participants,
-                "Business Unit": bu, "Primary Use Case": uc, "Secondary Use Case": uc2,
+                "Business Unit": bu,
                 "Cloud Environment": cloud, "Current Data Platform": platform, "Data Volume": volume,
                 "Compliance Requirements": ", ".join(compliance),
                 "POC Start Date": str(start_date), "Target Completion Date": str(end_date),
