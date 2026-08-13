@@ -43,7 +43,6 @@ OVERVIEW_HEADERS = [
 
 KPI_HEADERS      = ["POC_ID", "KPI", "Target", "Current Value", "Unit", "Status", "Notes"]
 ACTION_HEADERS   = ["POC_ID", "Action", "Assignee", "Category", "Due Date", "Status", "Notes"]
-TIMELINE_HEADERS = ["POC_ID", "Milestone", "Due Date", "Owner", "Status", "Notes"]
 
 BUSINESS_UNITS     = ["Diagnostics", "Drug Development (Biopharma Solutions)", "Genomics", "Technology Solutions", "Enterprise / Cross-BU"]
 COMPLIANCE_OPTIONS = ["HIPAA", "21 CFR Part 11", "GxP", "SOC 2", "CLIA", "GDPR"]
@@ -51,7 +50,6 @@ STATUS_OPTIONS     = ["Planning", "Active", "At Risk", "Completed — Won", "Com
 KPI_STATUSES       = ["On Track", "At Risk", "Met", "Not Started"]
 ACTION_CATS        = ["Technical", "Business", "Compliance", "Training", "Executive"]
 ACTION_STATUSES    = ["Open", "In Progress", "Complete", "Blocked"]
-TIMELINE_STATUSES  = ["Not Started", "In Progress", "At Risk", "Complete"]
 CLOUD_OPTIONS      = ["AWS", "Azure", "Multi-Cloud"]
 
 STATUS_EMOJI = {
@@ -78,7 +76,6 @@ def ensure_sheets():
         ("Overview",      OVERVIEW_HEADERS),
         ("KPIs",          KPI_HEADERS),
         ("Action_Items",  ACTION_HEADERS),
-        ("Timeline",      TIMELINE_HEADERS),
     ]:
         if title not in existing:
             ws = ss.add_worksheet(title=title, rows=1000, cols=max(len(headers), 10))
@@ -120,15 +117,6 @@ def load_actions(poc_id: str) -> pd.DataFrame:
     ws = get_ss().worksheet("Action_Items")
     data = ws.get_all_records()
     df = pd.DataFrame(data) if data else pd.DataFrame(columns=ACTION_HEADERS)
-    if not df.empty and "POC_ID" in df.columns:
-        df = df[df["POC_ID"] == poc_id].drop(columns=["POC_ID"])
-    return df
-
-@st.cache_data(ttl=300)
-def load_timeline(poc_id: str) -> pd.DataFrame:
-    ws = get_ss().worksheet("Timeline")
-    data = ws.get_all_records()
-    df = pd.DataFrame(data) if data else pd.DataFrame(columns=TIMELINE_HEADERS)
     if not df.empty and "POC_ID" in df.columns:
         df = df[df["POC_ID"] == poc_id].drop(columns=["POC_ID"])
     return df
@@ -490,10 +478,9 @@ if not active_poc_id:
     st.stop()
 
 # ── Load data for active POC ──────────────────────────────────────────────────
-ov       = load_overview(active_poc_id)
-kpis     = load_kpis(active_poc_id)
-actions  = load_actions(active_poc_id)
-timeline = load_timeline(active_poc_id)
+ov      = load_overview(active_poc_id)
+kpis    = load_kpis(active_poc_id)
+actions = load_actions(active_poc_id)
 
 # ── Page header ───────────────────────────────────────────────────────────────
 customer_name   = active_row.get("Customer", active_poc_id)
@@ -507,7 +494,7 @@ if engagement_name:
 render_summary_bar(ov, kpis, actions)
 st.divider()
 
-tab1, tab2, tab3, tab4 = st.tabs(["🏢 Overview", "📈 KPIs", "✅ Action Plan", "📅 Timeline"])
+tab1, tab2, tab3 = st.tabs(["🏢 Overview", "📈 KPIs", "✅ Action Plan"])
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -644,20 +631,6 @@ with tab2:
         st.success(f"KPIs saved by {st.session_state.get('editor_name') or st.session_state.get('editor_role','')}")
         st.rerun()
 
-    st.divider()
-
-    # Budget summary (edit via Overview tab)
-    st.subheader("Budget")
-
-    def fmt_money(v):
-        try: return f"${int(v):,}"
-        except: return f"${v}" if v else "—"
-
-    bm1, bm2 = st.columns(2)
-    with bm1: st.metric("POC Budget",      fmt_money(ov.get("POC Budget ($)", "")))
-    with bm2: st.metric("Confirmed Spend", fmt_money(ov.get("Confirmed Spend ($)", "")))
-    st.caption("To edit, go to the Overview tab.")
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 3 — ACTION PLAN
@@ -694,43 +667,5 @@ with tab3:
         clean = edited_actions.dropna(how="all")
         clean = clean[clean["Action"].astype(str).str.strip() != ""]
         save_all_rows("Action_Items", active_poc_id, DISPLAY_ACT, clean)
-        st.success("Saved.")
-        st.rerun()
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# TAB 4 — TIMELINE
-# ══════════════════════════════════════════════════════════════════════════════
-with tab4:
-    DISPLAY_TL = [h for h in TIMELINE_HEADERS if h != "POC_ID"]
-
-    st.subheader("POC Timeline")
-
-    tl_edit_df = timeline.copy() if not timeline.empty else pd.DataFrame(columns=DISPLAY_TL)
-    for col in DISPLAY_TL:
-        if col not in tl_edit_df.columns:
-            tl_edit_df[col] = ""
-    tl_edit_df = tl_edit_df[DISPLAY_TL]
-    tl_edit_df["Due Date"] = pd.to_datetime(tl_edit_df["Due Date"], errors="coerce").dt.date
-
-    edited_timeline = st.data_editor(
-        tl_edit_df,
-        num_rows="dynamic",
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "Milestone": st.column_config.TextColumn("Milestone", width=280),
-            "Due Date":  st.column_config.DateColumn("Due Date",  format="YYYY-MM-DD", width=120),
-            "Owner":     st.column_config.TextColumn("Owner",     width=140),
-            "Status":    st.column_config.SelectboxColumn("Status", options=TIMELINE_STATUSES, width=130),
-            "Notes":     st.column_config.TextColumn("Notes",     width=200),
-        },
-        key="timeline_editor",
-    )
-
-    if st.button("💾  Save Timeline", type="primary", key="save_timeline"):
-        clean = edited_timeline.dropna(how="all")
-        clean = clean[clean["Milestone"].astype(str).str.strip() != ""]
-        save_all_rows("Timeline", active_poc_id, DISPLAY_TL, clean)
         st.success("Saved.")
         st.rerun()
