@@ -40,9 +40,10 @@ OVERVIEW_HEADERS = [
     "Procurement Contact", "Budget Notes",
 ]
 
-KPI_HEADERS    = ["POC_ID", "KPI", "Target", "Current Value", "Unit", "Status", "Notes"]
-ACTION_HEADERS = ["POC_ID", "Action", "Owner", "Category", "Due Date", "Status", "Notes"]
-UPDATE_HEADERS = ["POC_ID", "Date", "Update", "Posted By"]
+KPI_HEADERS      = ["POC_ID", "KPI", "Target", "Current Value", "Unit", "Status", "Notes"]
+ACTION_HEADERS   = ["POC_ID", "Action", "Assignee", "Category", "Due Date", "Status", "Notes"]
+AUDIENCE_HEADERS = ["POC_ID", "Name", "Company", "Role", "Email"]
+TIMELINE_HEADERS = ["POC_ID", "Milestone", "Due Date", "Owner", "Status", "Notes"]
 
 USE_CASES = [
     "Real-World Evidence (RWE)",
@@ -58,9 +59,9 @@ BUSINESS_UNITS     = ["Diagnostics", "Drug Development (Biopharma Solutions)", "
 COMPLIANCE_OPTIONS = ["HIPAA", "21 CFR Part 11", "GxP", "SOC 2", "CLIA", "GDPR"]
 STATUS_OPTIONS     = ["Planning", "Active", "At Risk", "Completed — Won", "Completed — Lost"]
 KPI_STATUSES       = ["On Track", "At Risk", "Met", "Not Started"]
-ACTION_OWNERS      = ["Snowflake", "Customer", "Joint"]
 ACTION_CATS        = ["Technical", "Business", "Compliance", "Training", "Executive"]
 ACTION_STATUSES    = ["Open", "In Progress", "Complete", "Blocked"]
+TIMELINE_STATUSES  = ["Not Started", "In Progress", "At Risk", "Complete"]
 CLOUD_OPTIONS      = ["AWS", "Azure", "Multi-Cloud"]
 
 STATUS_EMOJI = {
@@ -87,7 +88,8 @@ def ensure_sheets():
         ("Overview",      OVERVIEW_HEADERS),
         ("KPIs",          KPI_HEADERS),
         ("Action_Items",  ACTION_HEADERS),
-        ("Updates",       UPDATE_HEADERS),
+        ("Audience",      AUDIENCE_HEADERS),
+        ("Timeline",      TIMELINE_HEADERS),
     ]:
         if title not in existing:
             ws = ss.add_worksheet(title=title, rows=1000, cols=max(len(headers), 10))
@@ -134,10 +136,19 @@ def load_actions(poc_id: str) -> pd.DataFrame:
     return df
 
 @st.cache_data(ttl=300)
-def load_updates(poc_id: str) -> pd.DataFrame:
-    ws = get_ss().worksheet("Updates")
+def load_audience(poc_id: str) -> pd.DataFrame:
+    ws = get_ss().worksheet("Audience")
     data = ws.get_all_records()
-    df = pd.DataFrame(data) if data else pd.DataFrame(columns=UPDATE_HEADERS)
+    df = pd.DataFrame(data) if data else pd.DataFrame(columns=AUDIENCE_HEADERS)
+    if not df.empty and "POC_ID" in df.columns:
+        df = df[df["POC_ID"] == poc_id].drop(columns=["POC_ID"])
+    return df
+
+@st.cache_data(ttl=300)
+def load_timeline(poc_id: str) -> pd.DataFrame:
+    ws = get_ss().worksheet("Timeline")
+    data = ws.get_all_records()
+    df = pd.DataFrame(data) if data else pd.DataFrame(columns=TIMELINE_HEADERS)
     if not df.empty and "POC_ID" in df.columns:
         df = df[df["POC_ID"] == poc_id].drop(columns=["POC_ID"])
     return df
@@ -155,10 +166,6 @@ def save_overview(poc_id: str, values: dict):
             st.cache_data.clear()
             return
     ws.append_row(row)
-    st.cache_data.clear()
-
-def append_to(sheet: str, poc_id: str, row: list):
-    get_ss().worksheet(sheet).append_row([poc_id] + row, value_input_option="USER_ENTERED")
     st.cache_data.clear()
 
 def update_sheet_row(sheet: str, poc_id: str, sheet_row: int, headers: list, values: dict):
@@ -191,20 +198,6 @@ def save_all_rows(sheet: str, poc_id: str, display_headers: list, edited_df: pd.
             value_input_option="USER_ENTERED",
         )
     st.cache_data.clear()
-
-def get_all_sheet_row(sheet: str, poc_id: str) -> list[tuple[int, dict]]:
-    """Return (sheet_row_number, record) pairs for a given poc_id."""
-    ws = get_ss().worksheet(sheet)
-    all_vals = ws.get_all_values()
-    if not all_vals:
-        return []
-    headers = all_vals[0]
-    result = []
-    for i, row in enumerate(all_vals[1:], start=2):
-        if row and row[0] == poc_id:
-            record = {headers[j]: row[j] for j in range(len(headers)) if j < len(row)}
-            result.append((i, record))
-    return result
 
 # ── Bootstrap ─────────────────────────────────────────────────────────────────
 try:
@@ -417,70 +410,6 @@ def status_badge(s: str) -> str:
     cls = m.get(s, "badge-none")
     return f'<span class="kpi-badge {cls}">{s}</span>'
 
-def kpi_card_class(s: str) -> str:
-    return {"Met":"met","On Track":"track","At Risk":"risk"}.get(s,"none")
-
-def action_dot_class(s: str) -> str:
-    return {"Complete":"dot-done","In Progress":"dot-prog","Blocked":"dot-blocked"}.get(s,"dot-open")
-
-def render_kpi_cards(df: pd.DataFrame):
-    if df.empty:
-        st.info("No KPIs defined yet.")
-        return
-    cols = st.columns(3)
-    for i, (_, row) in enumerate(df.iterrows()):
-        s    = str(row.get("Status",""))
-        val  = str(row.get("Current Value","—"))
-        unit = str(row.get("Unit",""))
-        with cols[i % 3]:
-            st.html(f"""
-<div class="kpi-card {kpi_card_class(s)}">
-  <div class="kpi-name">{row.get("KPI","")}</div>
-  <div class="kpi-value">{val} <span style="font-size:1rem;font-weight:400;color:#718096">{unit}</span></div>
-  <div class="kpi-target">Target: {row.get("Target","—")} {unit}</div>
-  {status_badge(s)}
-</div>""")
-
-def render_actions(df: pd.DataFrame):
-    if df.empty:
-        st.info("No action items yet.")
-        return
-    for _, row in df.iterrows():
-        s     = str(row.get("Status","Open"))
-        dot   = action_dot_class(s)
-        note  = str(row.get("Notes",""))
-        note_html = f'<div class="action-note">💬 {note}</div>' if note else ""
-        st.html(f"""
-<div class="action-row">
-  <div class="action-dot {dot}"></div>
-  <div class="action-body">
-    <div class="action-title">{row.get("Action","")}</div>
-    <div class="action-meta">
-      <b>{row.get("Owner","")}</b> &nbsp;·&nbsp; {row.get("Category","")}
-    </div>
-    {note_html}
-  </div>
-  <div class="action-right">
-    <div class="action-due">📅 {row.get("Due Date","")}</div>
-    {status_badge(s)}
-  </div>
-</div>""")
-
-def render_updates(df: pd.DataFrame):
-    if df.empty:
-        st.info("No updates posted yet.")
-        return
-    sorted_df = df.sort_values("Date", ascending=False)
-    for _, row in sorted_df.iterrows():
-        st.html(f"""
-<div class="update-card">
-  <div class="update-header">
-    <span class="update-by">🧑‍💼 {row.get("Posted By","")}</span>
-    <span class="update-date">{row.get("Date","")}</span>
-  </div>
-  <div class="update-text">{row.get("Update","")}</div>
-</div>""")
-
 def render_summary_bar(ov: dict, kpis: pd.DataFrame, actions: pd.DataFrame):
     met   = (kpis["Status"] == "Met").sum()    if not kpis.empty else 0
     total_kpi = len(kpis)
@@ -582,10 +511,11 @@ if not active_poc_id:
     st.stop()
 
 # ── Load data for active POC ──────────────────────────────────────────────────
-ov      = load_overview(active_poc_id)
-kpis    = load_kpis(active_poc_id)
-actions = load_actions(active_poc_id)
-updates = load_updates(active_poc_id)
+ov       = load_overview(active_poc_id)
+kpis     = load_kpis(active_poc_id)
+actions  = load_actions(active_poc_id)
+audience = load_audience(active_poc_id)
+timeline = load_timeline(active_poc_id)
 
 # ── Page header ───────────────────────────────────────────────────────────────
 customer_name   = active_row.get("Customer", active_poc_id)
@@ -599,49 +529,7 @@ if engagement_name:
 render_summary_bar(ov, kpis, actions)
 st.divider()
 
-tab0, tab1, tab2, tab3, tab4 = st.tabs(["📊 Sheet View", "🏢 Overview", "📈 KPIs & Budget", "✅ Action Plan", "📝 Updates"])
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# TAB 0 — SHEET VIEW
-# ══════════════════════════════════════════════════════════════════════════════
-with tab0:
-    st.subheader("Live Sheet Data")
-    st.caption(f"Showing data for **{customer_name}** only. Refreshes every 20 s.")
-
-    st.markdown("#### Overview")
-    if ov:
-        ov_df = pd.DataFrame([{k: v for k, v in ov.items() if k != "POC_ID"}])
-        half = len(ov_df.columns) // 2
-        cols = list(ov_df.columns)
-        st.dataframe(ov_df[cols[:half]], use_container_width=True, hide_index=True)
-        st.dataframe(ov_df[cols[half:]], use_container_width=True, hide_index=True)
-    else:
-        st.dataframe(pd.DataFrame(columns=OVERVIEW_HEADERS[1:]), use_container_width=True, hide_index=True)
-        st.caption("No overview data yet.")
-
-    st.divider()
-    st.markdown("#### KPIs")
-    st.dataframe(kpis if not kpis.empty else pd.DataFrame(columns=KPI_HEADERS[1:]),
-                 use_container_width=True, hide_index=True)
-
-    st.divider()
-    st.markdown("#### Mutual Action Plan")
-    st.dataframe(actions if not actions.empty else pd.DataFrame(columns=ACTION_HEADERS[1:]),
-                 use_container_width=True, hide_index=True)
-
-    st.divider()
-    st.markdown("#### Status Updates")
-    if not updates.empty:
-        st.dataframe(updates.sort_values("Date", ascending=False),
-                     use_container_width=True, hide_index=True)
-    else:
-        st.dataframe(pd.DataFrame(columns=UPDATE_HEADERS[1:]), use_container_width=True, hide_index=True)
-
-    st.divider()
-    if st.button("Refresh"):
-        st.cache_data.clear()
-        st.rerun()
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["🏢 Overview", "📈 KPIs", "👥 Audience", "✅ Action Plan", "📅 Timeline"])
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -742,7 +630,7 @@ with tab1:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 2 — KPIs & BUDGET
+# TAB 2 — KPIs
 # ══════════════════════════════════════════════════════════════════════════════
 with tab2:
     DISPLAY_KPI = [h for h in KPI_HEADERS if h != "POC_ID"]
@@ -782,8 +670,8 @@ with tab2:
 
     st.divider()
 
-    # Budget — always visible, no expander
-    st.subheader("Budget & Funding")
+    # Budget summary (edit via Overview tab)
+    st.subheader("Budget Summary")
 
     def fmt_money(v):
         try: return f"${int(v):,}"
@@ -795,39 +683,67 @@ with tab2:
     with bm3: st.metric("Potential ARR",   fmt_money(ov.get("Potential ARR ($)", "")))
     if ov.get("Budget Notes"):
         st.caption(f"📌 {ov['Budget Notes']}")
-
-    st.markdown("**Edit Budget**")
-    with st.form("budget_form"):
-        bf1, bf2, bf3 = st.columns(3)
-        with bf1: poc_budget = st.text_input("POC Budget ($)",      value=ov.get("POC Budget ($)", ""))
-        with bf2: conf_spend = st.text_input("Confirmed Spend ($)", value=ov.get("Confirmed Spend ($)", ""))
-        with bf3: arr_v      = st.text_input("Potential ARR ($)",   value=ov.get("Potential ARR ($)", ""))
-        proc_contact = st.text_input("Procurement Contact", value=ov.get("Procurement Contact", ""))
-        budget_notes = st.text_area("Budget Notes",         value=ov.get("Budget Notes", ""), height=60)
-        if st.form_submit_button("💾  Save Budget", type="primary"):
-            updated = dict(ov)
-            updated.update({"POC Budget ($)": poc_budget, "Confirmed Spend ($)": conf_spend,
-                            "Potential ARR ($)": arr_v, "Procurement Contact": proc_contact,
-                            "Budget Notes": budget_notes})
-            save_overview(active_poc_id, updated)
-            st.success("Budget saved.")
-            st.rerun()
+    st.caption("To edit budget figures, go to the Overview tab.")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 3 — ACTION PLAN
+# TAB 3 — AUDIENCE
 # ══════════════════════════════════════════════════════════════════════════════
 with tab3:
+    DISPLAY_AUD = [h for h in AUDIENCE_HEADERS if h != "POC_ID"]
+
+    st.subheader("Audience & Assignees")
+    st.caption("Define the people involved in this POC. Assignees listed here appear in the Action Plan and Timeline.")
+
+    aud_edit_df = audience.copy() if not audience.empty else pd.DataFrame(columns=DISPLAY_AUD)
+    for col in DISPLAY_AUD:
+        if col not in aud_edit_df.columns:
+            aud_edit_df[col] = ""
+    aud_edit_df = aud_edit_df[DISPLAY_AUD]
+
+    edited_audience = st.data_editor(
+        aud_edit_df,
+        num_rows="dynamic",
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Name":    st.column_config.TextColumn("Name", width="medium"),
+            "Company": st.column_config.TextColumn("Company", width="medium"),
+            "Role":    st.column_config.TextColumn("Role", width="medium"),
+            "Email":   st.column_config.TextColumn("Email", width="large"),
+        },
+        key="audience_editor",
+    )
+
+    if st.button("💾  Save Audience", type="primary", key="save_audience"):
+        clean = edited_audience.dropna(how="all")
+        clean = clean[clean["Name"].astype(str).str.strip() != ""]
+        save_all_rows("Audience", active_poc_id, DISPLAY_AUD, clean)
+        st.success("Audience saved.")
+        st.rerun()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 4 — ACTION PLAN
+# ══════════════════════════════════════════════════════════════════════════════
+with tab4:
     DISPLAY_ACT = [h for h in ACTION_HEADERS if h != "POC_ID"]
+    assignee_names = audience["Name"].dropna().tolist() if not audience.empty else []
 
     st.subheader("Mutual Action Plan")
-    st.caption("Edit status, owner, or notes directly in the table, then click **Save Actions**.")
+    st.caption("Edit any cell directly, then click **Save Actions**.")
 
     act_edit_df = actions.copy() if not actions.empty else pd.DataFrame(columns=DISPLAY_ACT)
     for col in DISPLAY_ACT:
         if col not in act_edit_df.columns:
             act_edit_df[col] = ""
     act_edit_df = act_edit_df[DISPLAY_ACT]
+
+    assignee_col = (
+        st.column_config.SelectboxColumn("Assignee", options=assignee_names)
+        if assignee_names
+        else st.column_config.TextColumn("Assignee")
+    )
 
     edited_actions = st.data_editor(
         act_edit_df,
@@ -836,7 +752,7 @@ with tab3:
         hide_index=True,
         column_config={
             "Action":   st.column_config.TextColumn("Action", width="large"),
-            "Owner":    st.column_config.SelectboxColumn("Owner",    options=ACTION_OWNERS),
+            "Assignee": assignee_col,
             "Category": st.column_config.SelectboxColumn("Category", options=ACTION_CATS),
             "Due Date": st.column_config.TextColumn("Due Date", help="YYYY-MM-DD"),
             "Status":   st.column_config.SelectboxColumn("Status",   options=ACTION_STATUSES),
@@ -852,38 +768,46 @@ with tab3:
         st.success(f"Actions saved by {st.session_state.get('editor_name') or st.session_state.get('editor_role','')}")
         st.rerun()
 
-    st.divider()
-    st.markdown("**Styled view**")
-    render_actions(actions)
-
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 4 — UPDATES
+# TAB 5 — TIMELINE
 # ══════════════════════════════════════════════════════════════════════════════
-with tab4:
-    st.subheader("Post a New Update")
+with tab5:
+    DISPLAY_TL = [h for h in TIMELINE_HEADERS if h != "POC_ID"]
 
-    editor_name_upd = st.session_state.get("editor_name", "")
-    editor_role_upd = st.session_state.get("editor_role", "Snowflake Team")
+    st.subheader("POC Timeline")
+    st.caption("Track milestones and key dates. Add rows for each phase or deliverable.")
 
-    with st.form("new_update"):
-        update_text = st.text_area("Update *", height=110,
-                                   placeholder="Key outcomes, decisions, blockers, or next steps…")
-        uf1, uf2 = st.columns([2, 1])
-        with uf1:
-            posted_by = st.text_input("Posted by *",
-                                      value=f"{editor_name_upd} ({editor_role_upd})" if editor_name_upd else editor_role_upd)
-        with uf2:
-            st.markdown(" ")
-        if st.form_submit_button("📤  Post Update", type="primary", use_container_width=True):
-            if update_text.strip() and posted_by.strip():
-                append_to("Updates", active_poc_id,
-                          [datetime.today().strftime("%Y-%m-%d %H:%M"), update_text.strip(), posted_by.strip()])
-                st.success("Posted.")
-                st.rerun()
-            else:
-                st.warning("Both fields are required.")
+    tl_edit_df = timeline.copy() if not timeline.empty else pd.DataFrame(columns=DISPLAY_TL)
+    for col in DISPLAY_TL:
+        if col not in tl_edit_df.columns:
+            tl_edit_df[col] = ""
+    tl_edit_df = tl_edit_df[DISPLAY_TL]
 
-    st.divider()
-    st.subheader("Update History")
-    render_updates(updates)
+    owner_col = (
+        st.column_config.SelectboxColumn("Owner", options=assignee_names)
+        if assignee_names
+        else st.column_config.TextColumn("Owner")
+    )
+
+    edited_timeline = st.data_editor(
+        tl_edit_df,
+        num_rows="dynamic",
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Milestone": st.column_config.TextColumn("Milestone", width="large"),
+            "Due Date":  st.column_config.TextColumn("Due Date", help="YYYY-MM-DD"),
+            "Owner":     owner_col,
+            "Status":    st.column_config.SelectboxColumn("Status", options=TIMELINE_STATUSES),
+            "Notes":     st.column_config.TextColumn("Notes", width="large"),
+        },
+        key="timeline_editor",
+    )
+
+    if st.button("💾  Save Timeline", type="primary", key="save_timeline"):
+        clean = edited_timeline.dropna(how="all")
+        clean = clean[clean["Milestone"].astype(str).str.strip() != ""]
+        save_all_rows("Timeline", active_poc_id, DISPLAY_TL, clean)
+        st.success("Timeline saved.")
+        st.rerun()
