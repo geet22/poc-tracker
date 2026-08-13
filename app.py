@@ -4,6 +4,7 @@ from google.oauth2.service_account import Credentials
 import pandas as pd
 from datetime import datetime, date
 import time
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode, DataReturnMode
 
 def _retry(fn, retries=3, wait=8):
     for attempt in range(retries):
@@ -154,7 +155,11 @@ st.html("""
 <style>
 html, body, [class*="css"], .stApp { font-family: 'Inter', sans-serif !important; }
 #MainMenu, footer, header { visibility: hidden; height: 0; }
-.block-container { padding-top: 1.5rem !important; padding-bottom: 3rem !important; }
+.block-container { padding: 0.75rem 2rem 1.5rem !important; }
+
+/* Tighten vertical gaps between components */
+div[data-testid="stVerticalBlock"] { gap: 0.35rem !important; }
+div[data-testid="stVerticalBlockBorderWrapper"] { gap: 0.35rem !important; }
 
 /* Sidebar */
 section[data-testid="stSidebar"] { background:#0B1929 !important; border-right:1px solid #1E3A5F !important; }
@@ -166,7 +171,7 @@ section[data-testid="stSidebar"] h3 { color:#fff !important; }
 section[data-testid="stSidebar"] hr { border-color:#1E3A5F !important; }
 section[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label {
     background:rgba(255,255,255,.04) !important; border:1px solid #1E3A5F !important;
-    border-radius:8px !important; padding:10px 14px !important; margin-bottom:6px !important; font-size:.85rem !important;
+    border-radius:6px !important; padding:8px 12px !important; margin-bottom:4px !important; font-size:.82rem !important;
 }
 section[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:hover {
     background:rgba(41,181,232,.1) !important; border-color:#29B5E8 !important;
@@ -185,14 +190,13 @@ section[data-testid="stSidebar"] button[kind="primary"] {
 /* Buttons */
 .stButton > button[kind="primary"] {
     background:#29B5E8 !important; color:#000 !important; border:none !important;
-    border-radius:6px !important; font-weight:600 !important; font-size:.82rem !important;
-    padding:8px 20px !important;
+    border-radius:6px !important; font-weight:600 !important; font-size:.78rem !important; padding:6px 16px !important;
 }
-.stButton > button { border-radius:6px !important; font-size:.82rem !important; font-weight:500 !important; }
+.stButton > button { border-radius:6px !important; font-size:.78rem !important; font-weight:500 !important; }
 
 /* Inputs */
 .stTextInput input, .stTextArea textarea {
-    border-radius:6px !important; border:1px solid #E2E8F0 !important; font-size:.88rem !important;
+    border-radius:6px !important; border:1px solid #E2E8F0 !important; font-size:.85rem !important;
 }
 .stTextInput input:focus, .stTextArea textarea:focus {
     border-color:#29B5E8 !important; box-shadow:0 0 0 3px rgba(41,181,232,.12) !important;
@@ -200,36 +204,37 @@ section[data-testid="stSidebar"] button[kind="primary"] {
 
 /* Expander */
 .streamlit-expanderHeader {
-    font-size:.85rem !important; font-weight:600 !important;
-    background:#F8FAFC !important; border-radius:8px !important; border:1px solid #E2E8F0 !important;
+    font-size:.82rem !important; font-weight:600 !important;
+    background:#F8FAFC !important; border-radius:6px !important; border:1px solid #E2E8F0 !important;
+    padding:8px 14px !important;
 }
-hr { border-color:#E2E8F0 !important; }
+hr { border-color:#F1F5F9 !important; margin:0.4rem 0 !important; }
 
-/* Stat cards */
-.stat-row { display:flex; gap:12px; margin:1rem 0 1.5rem 0; flex-wrap:wrap; }
+/* Compact stat cards */
+.stat-row { display:flex; gap:10px; margin:0.5rem 0 0.75rem 0; flex-wrap:wrap; }
 .stat-card {
-    flex:1 1 150px; background:#fff; border:1px solid #E2E8F0;
-    border-radius:10px; padding:16px 20px; min-width:140px;
-    box-shadow:0 1px 4px rgba(0,0,0,.05);
+    flex:1 1 120px; background:#fff; border:1px solid #E2E8F0;
+    border-radius:8px; padding:12px 16px; min-width:120px;
+    box-shadow:0 1px 3px rgba(0,0,0,.04);
 }
-.stat-label { font-size:.68rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#94A3B8; margin-bottom:8px; }
-.stat-value { font-size:1.6rem; font-weight:700; color:#1A202C; line-height:1.1; }
-.stat-value-sm { font-size:1.1rem; font-weight:700; color:#1A202C; margin-top:4px; }
-.stat-sub { font-size:.72rem; color:#A0AEC0; margin-top:4px; }
+.stat-label { font-size:.63rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#94A3B8; margin-bottom:5px; }
+.stat-value { font-size:1.4rem; font-weight:700; color:#1A202C; line-height:1.1; }
+.stat-value-sm { font-size:1rem; font-weight:700; color:#1A202C; }
+.stat-sub { font-size:.68rem; color:#A0AEC0; margin-top:3px; }
 
 /* Section label */
 .section-label {
-    font-size:.68rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase;
-    color:#94A3B8; padding-bottom:.6rem; border-bottom:2px solid #F1F5F9; margin-bottom:.5rem;
+    font-size:.63rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase;
+    color:#94A3B8; padding-bottom:.4rem; border-bottom:2px solid #F1F5F9; margin-bottom:0;
 }
 
 /* Status pills */
-.pill { display:inline-block; font-size:.72rem; font-weight:600; padding:3px 12px; border-radius:20px; }
-.p-green  { background:#DCFCE7; color:#166534; }
-.p-blue   { background:#DBEAFE; color:#1E40AF; }
-.p-amber  { background:#FEF3C7; color:#92400E; }
-.p-red    { background:#FEE2E2; color:#991B1B; }
-.p-gray   { background:#F1F5F9; color:#475569; }
+.pill { display:inline-block; font-size:.7rem; font-weight:600; padding:2px 10px; border-radius:20px; }
+.p-green { background:#DCFCE7; color:#166534; }
+.p-blue  { background:#DBEAFE; color:#1E40AF; }
+.p-amber { background:#FEF3C7; color:#92400E; }
+.p-red   { background:#FEE2E2; color:#991B1B; }
+.p-gray  { background:#F1F5F9; color:#475569; }
 </style>
 """)
 
@@ -245,6 +250,31 @@ def pill(t): return f'<span class="pill {_PILL.get(t,"p-gray")}">{t}</span>'
 def fmt_money(v):
     try: return f"${int(str(v).replace(',','').replace('$','')):,}"
     except: return f"${v}" if v else "—"
+
+def ag_table(df: pd.DataFrame, col_defs: dict, key: str) -> pd.DataFrame:
+    """Render a compact editable AG Grid table and return the edited DataFrame."""
+    gb = GridOptionsBuilder.from_dataframe(df)
+    gb.configure_default_column(
+        editable=True, resizable=True, sortable=False,
+        filter=False, suppressMenu=True, minWidth=60,
+    )
+    for field, opts in col_defs.items():
+        gb.configure_column(field, **opts)
+    gb.configure_grid_options(
+        rowHeight=28, headerHeight=32,
+        suppressMovableColumns=True, suppressContextMenu=True,
+        domLayout="autoHeight",
+    )
+    resp = AgGrid(
+        df,
+        gridOptions=gb.build(),
+        update_mode=GridUpdateMode.MANUAL,
+        data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
+        theme="alpine",
+        fit_columns_on_grid_load=True,
+        key=key,
+    )
+    return pd.DataFrame(resp["data"])
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 registry = load_registry()
@@ -362,22 +392,19 @@ for col in DISPLAY_KPI:
     if col not in kpi_df.columns:
         kpi_df[col] = ""
 kpi_df = kpi_df[DISPLAY_KPI]
-# Ensure all columns are plain strings so data_editor renders every cell as editable
 for col in DISPLAY_KPI:
     kpi_df[col] = kpi_df[col].astype(str).replace("nan", "")
 
-edited_kpis = st.data_editor(
-    kpi_df, num_rows="dynamic", use_container_width=True, hide_index=True,
-    column_config={
-        "KPI":           st.column_config.TextColumn("KPI",     width=260),
-        "Target":        st.column_config.TextColumn("Target",  width=100),
-        "Current Value": st.column_config.TextColumn("Current Value", width=130),
-        "Unit":          st.column_config.TextColumn("Unit",    width=80),
-        "Status":        st.column_config.SelectboxColumn("Status", options=KPI_STATUSES, width=130),
-        "Notes":         st.column_config.TextColumn("Notes",   width=220),
-    },
-    key="kpi_editor",
-)
+edited_kpis = ag_table(kpi_df, {
+    "KPI":           {"flex": 3},
+    "Target":        {"width": 90},
+    "Current Value": {"width": 110},
+    "Unit":          {"width": 70},
+    "Status":        {"width": 130, "cellEditor": "agSelectCellEditor",
+                      "cellEditorParams": {"values": KPI_STATUSES}, "cellEditorPopup": True},
+    "Notes":         {"flex": 2},
+}, key="kpi_grid")
+
 if st.button("Save KPIs", type="primary", key="save_kpis"):
     clean = edited_kpis.dropna(how="all")
     clean = clean[clean["KPI"].astype(str).str.strip() != ""]
@@ -396,23 +423,20 @@ for col in DISPLAY_ACT:
     if col not in act_df.columns:
         act_df[col] = ""
 act_df = act_df[DISPLAY_ACT]
-# Cast text columns to string before date coercion
-for col in [c for c in DISPLAY_ACT if c != "Due Date"]:
+for col in DISPLAY_ACT:
     act_df[col] = act_df[col].astype(str).replace("nan", "")
-act_df["Due Date"] = pd.to_datetime(act_df["Due Date"], errors="coerce").dt.date
 
-edited_actions = st.data_editor(
-    act_df, num_rows="dynamic", use_container_width=True, hide_index=True,
-    column_config={
-        "Action":   st.column_config.TextColumn("Action",   width=260),
-        "Assignee": st.column_config.TextColumn("Assignee", width=130),
-        "Category": st.column_config.SelectboxColumn("Category", options=ACTION_CATS, width=130),
-        "Due Date": st.column_config.DateColumn("Due Date", format="YYYY-MM-DD", width=120),
-        "Status":   st.column_config.SelectboxColumn("Status", options=ACTION_STATUSES, width=120),
-        "Notes":    st.column_config.TextColumn("Notes",    width=200),
-    },
-    key="action_editor",
-)
+edited_actions = ag_table(act_df, {
+    "Action":   {"flex": 3},
+    "Assignee": {"width": 130},
+    "Category": {"width": 130, "cellEditor": "agSelectCellEditor",
+                 "cellEditorParams": {"values": ACTION_CATS}, "cellEditorPopup": True},
+    "Due Date": {"width": 110},
+    "Status":   {"width": 120, "cellEditor": "agSelectCellEditor",
+                 "cellEditorParams": {"values": ACTION_STATUSES}, "cellEditorPopup": True},
+    "Notes":    {"flex": 2},
+}, key="action_grid")
+
 if st.button("Save Actions", type="primary", key="save_actions"):
     clean = edited_actions.dropna(how="all")
     clean = clean[clean["Action"].astype(str).str.strip() != ""]
