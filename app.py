@@ -43,7 +43,6 @@ OVERVIEW_HEADERS = [
 
 KPI_HEADERS      = ["POC_ID", "KPI", "Target", "Current Value", "Unit", "Status", "Notes"]
 ACTION_HEADERS   = ["POC_ID", "Action", "Assignee", "Category", "Due Date", "Status", "Notes"]
-AUDIENCE_HEADERS = ["POC_ID", "Name", "Company", "Role", "Email"]
 TIMELINE_HEADERS = ["POC_ID", "Milestone", "Due Date", "Owner", "Status", "Notes"]
 
 BUSINESS_UNITS     = ["Diagnostics", "Drug Development (Biopharma Solutions)", "Genomics", "Technology Solutions", "Enterprise / Cross-BU"]
@@ -79,7 +78,6 @@ def ensure_sheets():
         ("Overview",      OVERVIEW_HEADERS),
         ("KPIs",          KPI_HEADERS),
         ("Action_Items",  ACTION_HEADERS),
-        ("Audience",      AUDIENCE_HEADERS),
         ("Timeline",      TIMELINE_HEADERS),
     ]:
         if title not in existing:
@@ -122,15 +120,6 @@ def load_actions(poc_id: str) -> pd.DataFrame:
     ws = get_ss().worksheet("Action_Items")
     data = ws.get_all_records()
     df = pd.DataFrame(data) if data else pd.DataFrame(columns=ACTION_HEADERS)
-    if not df.empty and "POC_ID" in df.columns:
-        df = df[df["POC_ID"] == poc_id].drop(columns=["POC_ID"])
-    return df
-
-@st.cache_data(ttl=300)
-def load_audience(poc_id: str) -> pd.DataFrame:
-    ws = get_ss().worksheet("Audience")
-    data = ws.get_all_records()
-    df = pd.DataFrame(data) if data else pd.DataFrame(columns=AUDIENCE_HEADERS)
     if not df.empty and "POC_ID" in df.columns:
         df = df[df["POC_ID"] == poc_id].drop(columns=["POC_ID"])
     return df
@@ -504,7 +493,6 @@ if not active_poc_id:
 ov       = load_overview(active_poc_id)
 kpis     = load_kpis(active_poc_id)
 actions  = load_actions(active_poc_id)
-audience = load_audience(active_poc_id)
 timeline = load_timeline(active_poc_id)
 
 # ── Page header ───────────────────────────────────────────────────────────────
@@ -519,7 +507,7 @@ if engagement_name:
 render_summary_bar(ov, kpis, actions)
 st.divider()
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["🏢 Overview", "📈 KPIs", "👥 Audience", "✅ Action Plan", "📅 Timeline"])
+tab1, tab2, tab3, tab4 = st.tabs(["🏢 Overview", "📈 KPIs", "✅ Action Plan", "📅 Timeline"])
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -672,51 +660,12 @@ with tab2:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 3 — AUDIENCE
+# TAB 3 — ACTION PLAN
 # ══════════════════════════════════════════════════════════════════════════════
 with tab3:
-    DISPLAY_AUD = [h for h in AUDIENCE_HEADERS if h != "POC_ID"]
-
-    st.subheader("Audience & Assignees")
-    st.caption("Define the people involved in this POC. Assignees listed here appear in the Action Plan and Timeline.")
-
-    aud_edit_df = audience.copy() if not audience.empty else pd.DataFrame(columns=DISPLAY_AUD)
-    for col in DISPLAY_AUD:
-        if col not in aud_edit_df.columns:
-            aud_edit_df[col] = ""
-    aud_edit_df = aud_edit_df[DISPLAY_AUD]
-
-    edited_audience = st.data_editor(
-        aud_edit_df,
-        num_rows="dynamic",
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "Name":    st.column_config.TextColumn("Name", width="medium"),
-            "Company": st.column_config.TextColumn("Company", width="medium"),
-            "Role":    st.column_config.TextColumn("Role", width="medium"),
-            "Email":   st.column_config.TextColumn("Email", width="large"),
-        },
-        key="audience_editor",
-    )
-
-    if st.button("💾  Save Audience", type="primary", key="save_audience"):
-        clean = edited_audience.dropna(how="all")
-        clean = clean[clean["Name"].astype(str).str.strip() != ""]
-        save_all_rows("Audience", active_poc_id, DISPLAY_AUD, clean)
-        st.success("Audience saved.")
-        st.rerun()
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# TAB 4 — ACTION PLAN
-# ══════════════════════════════════════════════════════════════════════════════
-with tab4:
     DISPLAY_ACT = [h for h in ACTION_HEADERS if h != "POC_ID"]
-    assignee_names = audience["Name"].dropna().tolist() if not audience.empty else []
 
     st.subheader("Mutual Action Plan")
-    st.caption("Edit any cell directly, then click **Save Actions**.")
 
     act_edit_df = actions.copy() if not actions.empty else pd.DataFrame(columns=DISPLAY_ACT)
     for col in DISPLAY_ACT:
@@ -724,24 +673,18 @@ with tab4:
             act_edit_df[col] = ""
     act_edit_df = act_edit_df[DISPLAY_ACT]
 
-    assignee_col = (
-        st.column_config.SelectboxColumn("Assignee", options=assignee_names)
-        if assignee_names
-        else st.column_config.TextColumn("Assignee")
-    )
-
     edited_actions = st.data_editor(
         act_edit_df,
         num_rows="dynamic",
         use_container_width=True,
         hide_index=True,
         column_config={
-            "Action":   st.column_config.TextColumn("Action", width="large"),
-            "Assignee": assignee_col,
-            "Category": st.column_config.SelectboxColumn("Category", options=ACTION_CATS),
-            "Due Date": st.column_config.TextColumn("Due Date", help="YYYY-MM-DD"),
-            "Status":   st.column_config.SelectboxColumn("Status",   options=ACTION_STATUSES),
-            "Notes":    st.column_config.TextColumn("Notes", width="large"),
+            "Action":   st.column_config.TextColumn("Action",   width=280),
+            "Assignee": st.column_config.TextColumn("Assignee", width=140),
+            "Category": st.column_config.SelectboxColumn("Category", options=ACTION_CATS, width=130),
+            "Due Date": st.column_config.DateColumn("Due Date", format="YYYY-MM-DD", width=120),
+            "Status":   st.column_config.SelectboxColumn("Status", options=ACTION_STATUSES, width=120),
+            "Notes":    st.column_config.TextColumn("Notes",    width=200),
         },
         key="action_editor",
     )
@@ -750,18 +693,17 @@ with tab4:
         clean = edited_actions.dropna(how="all")
         clean = clean[clean["Action"].astype(str).str.strip() != ""]
         save_all_rows("Action_Items", active_poc_id, DISPLAY_ACT, clean)
-        st.success(f"Actions saved by {st.session_state.get('editor_name') or st.session_state.get('editor_role','')}")
+        st.success("Saved.")
         st.rerun()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 5 — TIMELINE
+# TAB 4 — TIMELINE
 # ══════════════════════════════════════════════════════════════════════════════
-with tab5:
+with tab4:
     DISPLAY_TL = [h for h in TIMELINE_HEADERS if h != "POC_ID"]
 
     st.subheader("POC Timeline")
-    st.caption("Track milestones and key dates. Add rows for each phase or deliverable.")
 
     tl_edit_df = timeline.copy() if not timeline.empty else pd.DataFrame(columns=DISPLAY_TL)
     for col in DISPLAY_TL:
@@ -769,23 +711,17 @@ with tab5:
             tl_edit_df[col] = ""
     tl_edit_df = tl_edit_df[DISPLAY_TL]
 
-    owner_col = (
-        st.column_config.SelectboxColumn("Owner", options=assignee_names)
-        if assignee_names
-        else st.column_config.TextColumn("Owner")
-    )
-
     edited_timeline = st.data_editor(
         tl_edit_df,
         num_rows="dynamic",
         use_container_width=True,
         hide_index=True,
         column_config={
-            "Milestone": st.column_config.TextColumn("Milestone", width="large"),
-            "Due Date":  st.column_config.TextColumn("Due Date", help="YYYY-MM-DD"),
-            "Owner":     owner_col,
-            "Status":    st.column_config.SelectboxColumn("Status", options=TIMELINE_STATUSES),
-            "Notes":     st.column_config.TextColumn("Notes", width="large"),
+            "Milestone": st.column_config.TextColumn("Milestone", width=280),
+            "Due Date":  st.column_config.DateColumn("Due Date",  format="YYYY-MM-DD", width=120),
+            "Owner":     st.column_config.TextColumn("Owner",     width=140),
+            "Status":    st.column_config.SelectboxColumn("Status", options=TIMELINE_STATUSES, width=130),
+            "Notes":     st.column_config.TextColumn("Notes",     width=200),
         },
         key="timeline_editor",
     )
@@ -794,5 +730,5 @@ with tab5:
         clean = edited_timeline.dropna(how="all")
         clean = clean[clean["Milestone"].astype(str).str.strip() != ""]
         save_all_rows("Timeline", active_poc_id, DISPLAY_TL, clean)
-        st.success("Timeline saved.")
+        st.success("Saved.")
         st.rerun()
