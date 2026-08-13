@@ -4,7 +4,6 @@ from google.oauth2.service_account import Credentials
 import pandas as pd
 from datetime import datetime, date
 import time
-from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode, DataReturnMode
 
 def _retry(fn, retries=3, wait=8):
     for attempt in range(retries):
@@ -16,16 +15,14 @@ def _retry(fn, retries=3, wait=8):
             else:
                 raise
 
-st.set_page_config(page_title="Snowflake POC Tracker", layout="wide")
+st.set_page_config(page_title="POC Tracker", layout="wide", initial_sidebar_state="expanded")
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive",
 ]
 
-# ── Headers ───────────────────────────────────────────────────────────────────
 REGISTRY_HEADERS = ["POC_ID", "Customer", "Engagement", "Status", "Created"]
-
 OVERVIEW_HEADERS = [
     "POC_ID",
     "Technical Champion", "Technical Champion Title",
@@ -38,7 +35,6 @@ OVERVIEW_HEADERS = [
     "POC Objective", "Technical Success Criteria", "Business Success Criteria",
     "POC Budget ($)", "Confirmed Spend ($)",
 ]
-
 KPI_HEADERS    = ["POC_ID", "KPI", "Target", "Current Value", "Unit", "Status", "Notes"]
 ACTION_HEADERS = ["POC_ID", "Action", "Assignee", "Category", "Due Date", "Status", "Notes"]
 
@@ -49,13 +45,9 @@ KPI_STATUSES       = ["On Track", "At Risk", "Met", "Not Started"]
 ACTION_CATS        = ["Technical", "Business", "Compliance", "Training", "Executive"]
 ACTION_STATUSES    = ["Open", "In Progress", "Complete", "Blocked"]
 CLOUD_OPTIONS      = ["AWS", "Azure", "Multi-Cloud"]
+STATUS_EMOJI       = {"Planning":"🔵","Active":"🟢","At Risk":"🟡","Completed — Won":"✅","Completed — Lost":"🔴"}
 
-STATUS_EMOJI = {
-    "Planning": "🔵", "Active": "🟢", "At Risk": "🟡",
-    "Completed — Won": "✅", "Completed — Lost": "🔴",
-}
-
-# ── Google Sheets ─────────────────────────────────────────────────────────────
+# ── Sheets ────────────────────────────────────────────────────────────────────
 @st.cache_resource
 def get_client():
     creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=SCOPES)
@@ -83,21 +75,20 @@ def ensure_sheets():
             if not ws.row_values(1):
                 ws.insert_row(headers, 1)
 
-# ── Load ──────────────────────────────────────────────────────────────────────
 @st.cache_data(ttl=300)
-def load_registry() -> pd.DataFrame:
+def load_registry():
     data = get_ss().worksheet("POC_Registry").get_all_records()
     return pd.DataFrame(data) if data else pd.DataFrame(columns=REGISTRY_HEADERS)
 
 @st.cache_data(ttl=300)
-def load_overview(poc_id: str) -> dict:
+def load_overview(poc_id):
     for r in get_ss().worksheet("Overview").get_all_records():
         if r.get("POC_ID") == poc_id:
             return r
     return {}
 
 @st.cache_data(ttl=300)
-def load_kpis(poc_id: str) -> pd.DataFrame:
+def load_kpis(poc_id):
     data = get_ss().worksheet("KPIs").get_all_records()
     df = pd.DataFrame(data) if data else pd.DataFrame(columns=KPI_HEADERS)
     if not df.empty and "POC_ID" in df.columns:
@@ -105,26 +96,22 @@ def load_kpis(poc_id: str) -> pd.DataFrame:
     return df
 
 @st.cache_data(ttl=300)
-def load_actions(poc_id: str) -> pd.DataFrame:
+def load_actions(poc_id):
     data = get_ss().worksheet("Action_Items").get_all_records()
     df = pd.DataFrame(data) if data else pd.DataFrame(columns=ACTION_HEADERS)
     if not df.empty and "POC_ID" in df.columns:
         return df[df["POC_ID"] == poc_id].drop(columns=["POC_ID"])
     return df
 
-# ── Save ──────────────────────────────────────────────────────────────────────
-def save_overview(poc_id: str, values: dict):
+def save_overview(poc_id, values):
     ws = get_ss().worksheet("Overview")
-    all_rows = ws.get_all_values()
+    rows = ws.get_all_values()
     row = [poc_id] + [values.get(h, "") for h in OVERVIEW_HEADERS[1:]]
-    for i, r in enumerate(all_rows[1:], start=2):
+    for i, r in enumerate(rows[1:], start=2):
         if r and r[0] == poc_id:
-            ws.delete_rows(i)
-            ws.insert_row(row, i)
-            st.cache_data.clear()
-            return
-    ws.append_row(row)
-    st.cache_data.clear()
+            ws.delete_rows(i); ws.insert_row(row, i)
+            st.cache_data.clear(); return
+    ws.append_row(row); st.cache_data.clear()
 
 def create_poc(poc_id, customer, engagement, status):
     get_ss().worksheet("POC_Registry").append_row(
@@ -132,108 +119,129 @@ def create_poc(poc_id, customer, engagement, status):
     )
     st.cache_data.clear()
 
-def save_all_rows(sheet: str, poc_id: str, headers: list, df: pd.DataFrame):
+def save_all_rows(sheet, poc_id, headers, df):
     ws = get_ss().worksheet(sheet)
-    all_vals = ws.get_all_values()
-    for row_num in reversed([i + 2 for i, r in enumerate(all_vals[1:]) if r and r[0] == poc_id]):
-        ws.delete_rows(row_num)
+    vals = ws.get_all_values()
+    for n in reversed([i+2 for i, r in enumerate(vals[1:]) if r and r[0] == poc_id]):
+        ws.delete_rows(n)
     for _, row in df.iterrows():
-        ws.append_row([poc_id] + [str(row.get(h, "")) for h in headers], value_input_option="USER_ENTERED")
+        ws.append_row([poc_id]+[str(row.get(h,"")) for h in headers], value_input_option="USER_ENTERED")
     st.cache_data.clear()
 
 # ── Bootstrap ─────────────────────────────────────────────────────────────────
 try:
     _retry(ensure_sheets)
 except Exception as e:
-    st.error(f"Could not connect to Google Sheets: {e}")
-    st.stop()
+    st.error(f"Could not connect to Google Sheets: {e}"); st.stop()
 
 # ── Styles ────────────────────────────────────────────────────────────────────
 st.html("""
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-html, body, [class*="css"], .stApp { font-family: 'Inter', sans-serif !important; }
-#MainMenu, footer, header { visibility: hidden; height: 0; }
-.block-container { padding: 0.75rem 2rem 1.5rem !important; }
+*, html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
+#MainMenu, footer, header { visibility:hidden; height:0; }
 
-/* Tighten vertical gaps between components */
-div[data-testid="stVerticalBlock"] { gap: 0.35rem !important; }
-div[data-testid="stVerticalBlockBorderWrapper"] { gap: 0.35rem !important; }
+/* Page background */
+[data-testid="stAppViewContainer"] > .main { background:#EBEDF0 !important; }
+.block-container { padding:0.6rem 1.4rem 2rem !important; max-width:1300px; }
+
+/* Vertical rhythm */
+[data-testid="stVerticalBlock"] { gap:0.45rem !important; }
+
+/* Bordered containers become white cards */
+[data-testid="stVerticalBlockBorderWrapper"] {
+    background:#fff !important;
+    border:1px solid #DDE1E7 !important;
+    border-radius:10px !important;
+    box-shadow:0 1px 3px rgba(0,0,0,.06) !important;
+    padding:0 !important;
+}
+[data-testid="stVerticalBlockBorderWrapper"] > div > [data-testid="stVerticalBlock"] {
+    padding:16px 20px !important; gap:0.6rem !important;
+}
 
 /* Sidebar */
-section[data-testid="stSidebar"] { background:#0B1929 !important; border-right:1px solid #1E3A5F !important; }
+section[data-testid="stSidebar"] { background:#0F172A !important; border-right:1px solid #1E293B !important; width:230px !important; }
 section[data-testid="stSidebar"] p, section[data-testid="stSidebar"] span,
 section[data-testid="stSidebar"] small, section[data-testid="stSidebar"] div,
-section[data-testid="stSidebar"] .stRadio label { color:#CBD5E0 !important; }
+section[data-testid="stSidebar"] label { color:#94A3B8 !important; }
 section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] h2,
-section[data-testid="stSidebar"] h3 { color:#fff !important; }
-section[data-testid="stSidebar"] hr { border-color:#1E3A5F !important; }
+section[data-testid="stSidebar"] h3, section[data-testid="stSidebar"] strong { color:#F1F5F9 !important; }
+section[data-testid="stSidebar"] hr { border-color:#1E293B !important; margin:8px 0 !important; }
 section[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label {
-    background:rgba(255,255,255,.04) !important; border:1px solid #1E3A5F !important;
-    border-radius:6px !important; padding:8px 12px !important; margin-bottom:4px !important; font-size:.82rem !important;
+    background:rgba(255,255,255,.03) !important; border:1px solid #1E293B !important;
+    border-radius:6px !important; padding:7px 12px !important; margin-bottom:3px !important;
+    font-size:.8rem !important; color:#CBD5E1 !important;
 }
 section[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:hover {
-    background:rgba(41,181,232,.1) !important; border-color:#29B5E8 !important;
+    background:rgba(41,181,232,.08) !important; border-color:#29B5E8 !important;
 }
-section[data-testid="stSidebar"] input[type="text"], section[data-testid="stSidebar"] select,
-section[data-testid="stSidebar"] textarea {
-    background:rgba(255,255,255,.06) !important; border:1px solid #1E3A5F !important;
-    color:#fff !important; border-radius:6px !important;
+section[data-testid="stSidebar"] input[type="text"] {
+    background:rgba(255,255,255,.05) !important; border:1px solid #1E293B !important;
+    color:#F1F5F9 !important; border-radius:6px !important; font-size:.82rem !important;
 }
 section[data-testid="stSidebar"] button[kind="primaryFormSubmit"],
 section[data-testid="stSidebar"] button[kind="primary"] {
-    background:#29B5E8 !important; color:#000 !important; border:none !important;
-    border-radius:6px !important; font-weight:600 !important;
+    background:#29B5E8 !important; color:#0F172A !important; border:none !important;
+    border-radius:6px !important; font-weight:600 !important; font-size:.78rem !important;
 }
 
 /* Buttons */
 .stButton > button[kind="primary"] {
-    background:#29B5E8 !important; color:#000 !important; border:none !important;
-    border-radius:6px !important; font-weight:600 !important; font-size:.78rem !important; padding:6px 16px !important;
+    background:#29B5E8 !important; color:#0F172A !important; border:none !important;
+    border-radius:6px !important; font-weight:600 !important; font-size:.75rem !important;
+    padding:5px 14px !important; height:30px !important; line-height:1 !important;
 }
-.stButton > button { border-radius:6px !important; font-size:.78rem !important; font-weight:500 !important; }
+.stButton > button {
+    border-radius:6px !important; font-size:.75rem !important; font-weight:500 !important;
+    height:30px !important; padding:5px 12px !important;
+}
 
 /* Inputs */
-.stTextInput input, .stTextArea textarea {
-    border-radius:6px !important; border:1px solid #E2E8F0 !important; font-size:.85rem !important;
+.stTextInput input, .stTextArea textarea, .stSelectbox > div > div {
+    border-radius:6px !important; border:1px solid #DDE1E7 !important;
+    font-size:.83rem !important; background:#FAFBFC !important;
 }
 .stTextInput input:focus, .stTextArea textarea:focus {
-    border-color:#29B5E8 !important; box-shadow:0 0 0 3px rgba(41,181,232,.12) !important;
+    border-color:#29B5E8 !important; box-shadow:0 0 0 3px rgba(41,181,232,.1) !important;
+    background:#fff !important;
 }
 
 /* Expander */
-.streamlit-expanderHeader {
-    font-size:.82rem !important; font-weight:600 !important;
-    background:#F8FAFC !important; border-radius:6px !important; border:1px solid #E2E8F0 !important;
-    padding:8px 14px !important;
+[data-testid="stExpander"] summary {
+    font-size:.8rem !important; font-weight:600 !important; color:#374151 !important;
+    background:#F9FAFB !important; border-radius:7px !important; padding:10px 14px !important;
+    border:1px solid #DDE1E7 !important;
 }
-hr { border-color:#F1F5F9 !important; margin:0.4rem 0 !important; }
+[data-testid="stExpander"] { border:none !important; background:transparent !important; }
 
-/* Compact stat cards */
-.stat-row { display:flex; gap:10px; margin:0.5rem 0 0.75rem 0; flex-wrap:wrap; }
+/* Dividers */
+hr { border-color:#EEF0F3 !important; margin:4px 0 !important; }
+
+/* Stat row */
+.stat-row { display:flex; gap:8px; margin:4px 0 8px; flex-wrap:wrap; }
 .stat-card {
-    flex:1 1 120px; background:#fff; border:1px solid #E2E8F0;
-    border-radius:8px; padding:12px 16px; min-width:120px;
-    box-shadow:0 1px 3px rgba(0,0,0,.04);
+    flex:1 1 110px; background:#fff; border:1px solid #DDE1E7;
+    border-radius:8px; padding:11px 15px; min-width:105px;
+    box-shadow:0 1px 2px rgba(0,0,0,.04);
 }
-.stat-label { font-size:.63rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#94A3B8; margin-bottom:5px; }
-.stat-value { font-size:1.4rem; font-weight:700; color:#1A202C; line-height:1.1; }
-.stat-value-sm { font-size:1rem; font-weight:700; color:#1A202C; }
-.stat-sub { font-size:.68rem; color:#A0AEC0; margin-top:3px; }
+.stat-label { font-size:.6rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:#9CA3AF; margin-bottom:4px; }
+.stat-value { font-size:1.35rem; font-weight:700; color:#111827; line-height:1.1; }
+.stat-value-sm { font-size:.95rem; font-weight:700; color:#111827; }
+.stat-sub { font-size:.65rem; color:#9CA3AF; margin-top:2px; }
 
-/* Section label */
-.section-label {
-    font-size:.63rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase;
-    color:#94A3B8; padding-bottom:.4rem; border-bottom:2px solid #F1F5F9; margin-bottom:0;
-}
-
-/* Status pills */
-.pill { display:inline-block; font-size:.7rem; font-weight:600; padding:2px 10px; border-radius:20px; }
-.p-green { background:#DCFCE7; color:#166534; }
+/* Pills */
+.pill { display:inline-block; font-size:.68rem; font-weight:600; padding:2px 9px; border-radius:20px; letter-spacing:.02em; }
+.p-green { background:#D1FAE5; color:#065F46; }
 .p-blue  { background:#DBEAFE; color:#1E40AF; }
 .p-amber { background:#FEF3C7; color:#92400E; }
 .p-red   { background:#FEE2E2; color:#991B1B; }
-.p-gray  { background:#F1F5F9; color:#475569; }
+.p-gray  { background:#F3F4F6; color:#374151; }
+
+/* Card heading row */
+.ch { display:flex; justify-content:space-between; align-items:center; margin-bottom:2px; }
+.ch-title { font-size:.78rem; font-weight:700; color:#111827; letter-spacing:-.01em; }
+.ch-sub   { font-size:.7rem; color:#9CA3AF; }
 </style>
 """)
 
@@ -250,91 +258,73 @@ def fmt_money(v):
     try: return f"${int(str(v).replace(',','').replace('$','')):,}"
     except: return f"${v}" if v else "—"
 
-def ag_table(df: pd.DataFrame, col_defs: dict, key: str) -> pd.DataFrame:
-    """Render a compact editable AG Grid table and return the edited DataFrame."""
-    gb = GridOptionsBuilder.from_dataframe(df)
-    gb.configure_default_column(
-        editable=True, resizable=True, sortable=False,
-        filter=False, suppressMenu=True, minWidth=60,
-    )
-    for field, opts in col_defs.items():
-        gb.configure_column(field, **opts)
-    gb.configure_grid_options(
-        rowHeight=28, headerHeight=32,
-        suppressMovableColumns=True, suppressContextMenu=True,
-        domLayout="autoHeight",
-    )
-    resp = AgGrid(
-        df,
-        gridOptions=gb.build(),
-        update_mode=GridUpdateMode.MANUAL,
-        data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
-        theme="alpine",
-        fit_columns_on_grid_load=True,
-        key=key,
-    )
-    return pd.DataFrame(resp["data"])
+def prep_df(df, cols):
+    """Ensure all cols exist, cast to str, append blank rows for editing."""
+    for c in cols:
+        if c not in df.columns: df[c] = ""
+    df = df[cols].copy()
+    for c in cols:
+        df[c] = df[c].astype(str).replace("nan", "")
+    blank = pd.DataFrame([{c: "" for c in cols}] * 3)
+    return pd.concat([df, blank], ignore_index=True)
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 registry = load_registry()
 
 with st.sidebar:
-    st.markdown("## POC Tracker")
+    st.markdown("**POC Tracker**")
     st.divider()
 
-    for k, d in [("editor_name", ""), ("editor_role", "Snowflake Team")]:
-        if k not in st.session_state:
-            st.session_state[k] = d
+    for k, d in [("editor_name",""),("editor_role","Snowflake Team")]:
+        if k not in st.session_state: st.session_state[k] = d
 
-    st.markdown("**Editing as**")
+    st.markdown("<small>Editing as</small>", unsafe_allow_html=True)
     st.session_state["editor_name"] = st.text_input(
         "name", value=st.session_state["editor_name"],
         placeholder="Your name", label_visibility="collapsed"
     )
     st.session_state["editor_role"] = st.radio(
-        "role", ["Snowflake Team", "Customer"],
-        index=0 if st.session_state["editor_role"] == "Snowflake Team" else 1,
+        "role", ["Snowflake Team","Customer"],
+        index=0 if st.session_state["editor_role"]=="Snowflake Team" else 1,
         horizontal=True, label_visibility="collapsed"
     )
     st.divider()
 
     poc_options = registry["POC_ID"].tolist() if not registry.empty else []
-
     if poc_options:
         labels = []
         for _, r in registry.iterrows():
-            e   = STATUS_EMOJI.get(r.get("Status", ""), "⚪")
-            eng = r.get("Engagement", "")
-            labels.append(f"{e}  {r['Customer']}" + (f"  —  {eng}" if eng else ""))
-
-        idx = st.radio("Select Engagement", range(len(poc_options)),
-                       format_func=lambda i: labels[i], key="poc_radio")
+            e = STATUS_EMOJI.get(r.get("Status",""),"⚪")
+            eng = r.get("Engagement","")
+            labels.append(f"{e} {r['Customer']}" + (f" · {eng}" if eng else ""))
+        idx = st.radio("Engagements", range(len(poc_options)),
+                       format_func=lambda i: labels[i], key="poc_radio",
+                       label_visibility="collapsed")
         active_poc_id = poc_options[idx]
-        active_row    = registry[registry["POC_ID"] == active_poc_id].iloc[0]
+        active_row    = registry[registry["POC_ID"]==active_poc_id].iloc[0]
     else:
         st.info("No POCs yet.")
         active_poc_id = None
         active_row    = {}
 
     st.divider()
-    with st.expander("＋  New POC", expanded=not poc_options):
-        with st.form("new_poc_form"):
-            np_cust = st.text_input("Customer Name *")
-            np_eng  = st.text_input("Engagement / BU")
-            np_st   = st.selectbox("Status", STATUS_OPTIONS)
+    with st.expander("＋ New POC", expanded=not poc_options):
+        with st.form("new_poc"):
+            c = st.text_input("Customer *")
+            e = st.text_input("Engagement / BU")
+            s = st.selectbox("Status", STATUS_OPTIONS)
             if st.form_submit_button("Create", type="primary"):
-                if np_cust.strip():
-                    slug = (np_cust.strip() + "-" + np_eng.strip()).lower().replace(" ","-").replace("·","").replace("/","")[:32]
-                    create_poc(slug, np_cust.strip(), np_eng.strip(), np_st)
-                    st.success(f"Created: {np_cust}")
-                    st.rerun()
+                if c.strip():
+                    slug = (c.strip()+"-"+e.strip()).lower().replace(" ","-").replace("·","").replace("/","")[:32]
+                    create_poc(slug, c.strip(), e.strip(), s)
+                    st.success(f"Created"); st.rerun()
                 else:
                     st.warning("Customer name required.")
 
 # ── Guard ─────────────────────────────────────────────────────────────────────
 if not active_poc_id:
-    st.title("Snowflake POC Tracker")
-    st.info("Create your first POC engagement using the sidebar.")
+    st.markdown("## POC Tracker")
+    st.info("Create your first engagement in the sidebar.")
     st.stop()
 
 # ── Data ──────────────────────────────────────────────────────────────────────
@@ -342,125 +332,111 @@ ov      = load_overview(active_poc_id)
 kpis    = load_kpis(active_poc_id)
 actions = load_actions(active_poc_id)
 
-# ── Header ────────────────────────────────────────────────────────────────────
 customer_name   = active_row.get("Customer", active_poc_id)
-engagement_name = active_row.get("Engagement", "")
-poc_status      = ov.get("Status", active_row.get("Status", ""))
+engagement_name = active_row.get("Engagement","")
+poc_status      = ov.get("Status", active_row.get("Status",""))
 
-st.markdown(f"## {customer_name} × Snowflake")
-if engagement_name:
-    st.caption(engagement_name)
-
-# Stat cards
-kpis_met   = int((kpis["Status"] == "Met").sum())     if not kpis.empty    else 0
+kpis_met   = int((kpis["Status"]=="Met").sum())     if not kpis.empty    else 0
 kpis_total = len(kpis)
-acts_open  = int((actions["Status"] == "Open").sum()) if not actions.empty else 0
+acts_open  = int((actions["Status"]=="Open").sum()) if not actions.empty else 0
 acts_total = len(actions)
+
+# ── Header ────────────────────────────────────────────────────────────────────
+h1, h2 = st.columns([3, 1])
+with h1:
+    st.markdown(f"### {customer_name} × Snowflake")
+    if engagement_name:
+        st.caption(engagement_name)
+with h2:
+    if st.button("↺ Refresh", key="refresh"):
+        st.cache_data.clear(); st.rerun()
 
 st.html(f"""
 <div class="stat-row">
   <div class="stat-card">
     <div class="stat-label">Status</div>
-    <div style="margin-top:6px">{pill(poc_status) if poc_status else "—"}</div>
+    <div style="margin-top:4px">{pill(poc_status) if poc_status else "—"}</div>
   </div>
   <div class="stat-card">
     <div class="stat-label">KPIs Met</div>
-    <div class="stat-value">{kpis_met}<span style="font-size:1rem;color:#CBD5E0;font-weight:400"> / {kpis_total}</span></div>
+    <div class="stat-value">{kpis_met}<span style="font-size:.9rem;color:#D1D5DB;font-weight:500"> /{kpis_total}</span></div>
   </div>
   <div class="stat-card">
     <div class="stat-label">Actions Open</div>
-    <div class="stat-value">{acts_open}<span style="font-size:1rem;color:#CBD5E0;font-weight:400"> / {acts_total}</span></div>
+    <div class="stat-value">{acts_open}<span style="font-size:.9rem;color:#D1D5DB;font-weight:500"> /{acts_total}</span></div>
   </div>
   <div class="stat-card">
-    <div class="stat-label">POC Budget</div>
+    <div class="stat-label">Budget</div>
     <div class="stat-value-sm">{fmt_money(ov.get("POC Budget ($)",""))}</div>
-    <div class="stat-sub">Spent: {fmt_money(ov.get("Confirmed Spend ($)",""))}</div>
+    <div class="stat-sub">Spent {fmt_money(ov.get("Confirmed Spend ($)",""))}</div>
   </div>
 </div>
 """)
 
 # ── KPIs ──────────────────────────────────────────────────────────────────────
-st.html('<div class="section-label">Key Performance Indicators</div>')
-
 DISPLAY_KPI = [h for h in KPI_HEADERS if h != "POC_ID"]
-kpi_df = kpis.copy() if not kpis.empty else pd.DataFrame(columns=DISPLAY_KPI)
-for col in DISPLAY_KPI:
-    if col not in kpi_df.columns:
-        kpi_df[col] = ""
-kpi_df = kpi_df[DISPLAY_KPI]
-for col in DISPLAY_KPI:
-    kpi_df[col] = kpi_df[col].astype(str).replace("nan", "")
-# Append blank rows so users can type new entries directly in the grid
-kpi_df = pd.concat([kpi_df, pd.DataFrame([{c: "" for c in DISPLAY_KPI}] * 3)], ignore_index=True)
+kpi_df = prep_df(kpis.copy() if not kpis.empty else pd.DataFrame(columns=DISPLAY_KPI), DISPLAY_KPI)
 
-edited_kpis = ag_table(kpi_df, {
-    "KPI":           {"flex": 3},
-    "Target":        {"width": 90},
-    "Current Value": {"width": 110},
-    "Unit":          {"width": 70},
-    "Status":        {"width": 130, "cellEditor": "agSelectCellEditor",
-                      "cellEditorParams": {"values": KPI_STATUSES}, "cellEditorPopup": True},
-    "Notes":         {"flex": 2},
-}, key="kpi_grid")
-
-if st.button("Save KPIs", type="primary", key="save_kpis"):
-    clean = edited_kpis.dropna(how="all")
-    clean = clean[clean["KPI"].astype(str).str.strip() != ""]
-    save_all_rows("KPIs", active_poc_id, DISPLAY_KPI, clean)
-    st.success("Saved.")
-    st.rerun()
-
-st.divider()
+with st.container(border=True):
+    st.html('<div class="ch"><span class="ch-title">Key Performance Indicators</span><span class="ch-sub">Click any cell to edit · Save when done</span></div>')
+    edited_kpis = st.data_editor(
+        kpi_df, num_rows="dynamic", use_container_width=True, hide_index=True,
+        column_config={
+            "KPI":           st.column_config.TextColumn("KPI",     width="large"),
+            "Target":        st.column_config.TextColumn("Target",  width="small"),
+            "Current Value": st.column_config.TextColumn("Current", width="small"),
+            "Unit":          st.column_config.TextColumn("Unit",    width="small"),
+            "Status":        st.column_config.SelectboxColumn("Status", options=KPI_STATUSES, width="medium"),
+            "Notes":         st.column_config.TextColumn("Notes",   width="large"),
+        },
+        key="kpi_editor",
+    )
+    if st.button("Save KPIs", type="primary", key="save_kpis"):
+        clean = edited_kpis.dropna(how="all")
+        clean = clean[clean["KPI"].astype(str).str.strip() != ""]
+        save_all_rows("KPIs", active_poc_id, DISPLAY_KPI, clean)
+        st.success("Saved."); st.rerun()
 
 # ── Action Plan ───────────────────────────────────────────────────────────────
-st.html('<div class="section-label">Action Plan</div>')
-
 DISPLAY_ACT = [h for h in ACTION_HEADERS if h != "POC_ID"]
-act_df = actions.copy() if not actions.empty else pd.DataFrame(columns=DISPLAY_ACT)
-for col in DISPLAY_ACT:
-    if col not in act_df.columns:
-        act_df[col] = ""
-act_df = act_df[DISPLAY_ACT]
-for col in DISPLAY_ACT:
-    act_df[col] = act_df[col].astype(str).replace("nan", "")
-act_df = pd.concat([act_df, pd.DataFrame([{c: "" for c in DISPLAY_ACT}] * 3)], ignore_index=True)
+act_df = prep_df(actions.copy() if not actions.empty else pd.DataFrame(columns=DISPLAY_ACT), DISPLAY_ACT)
 
-edited_actions = ag_table(act_df, {
-    "Action":   {"flex": 3},
-    "Assignee": {"width": 130},
-    "Category": {"width": 130, "cellEditor": "agSelectCellEditor",
-                 "cellEditorParams": {"values": ACTION_CATS}, "cellEditorPopup": True},
-    "Due Date": {"width": 110},
-    "Status":   {"width": 120, "cellEditor": "agSelectCellEditor",
-                 "cellEditorParams": {"values": ACTION_STATUSES}, "cellEditorPopup": True},
-    "Notes":    {"flex": 2},
-}, key="action_grid")
+with st.container(border=True):
+    st.html('<div class="ch"><span class="ch-title">Action Plan</span><span class="ch-sub">Click any cell to edit · Save when done</span></div>')
+    edited_actions = st.data_editor(
+        act_df, num_rows="dynamic", use_container_width=True, hide_index=True,
+        column_config={
+            "Action":   st.column_config.TextColumn("Action",   width="large"),
+            "Assignee": st.column_config.TextColumn("Assignee", width="medium"),
+            "Category": st.column_config.SelectboxColumn("Category", options=ACTION_CATS, width="medium"),
+            "Due Date": st.column_config.TextColumn("Due Date (YYYY-MM-DD)", width="medium"),
+            "Status":   st.column_config.SelectboxColumn("Status", options=ACTION_STATUSES, width="medium"),
+            "Notes":    st.column_config.TextColumn("Notes",    width="large"),
+        },
+        key="action_editor",
+    )
+    if st.button("Save Actions", type="primary", key="save_actions"):
+        clean = edited_actions.dropna(how="all")
+        clean = clean[clean["Action"].astype(str).str.strip() != ""]
+        save_all_rows("Action_Items", active_poc_id, DISPLAY_ACT, clean)
+        st.success("Saved."); st.rerun()
 
-if st.button("Save Actions", type="primary", key="save_actions"):
-    clean = edited_actions.dropna(how="all")
-    clean = clean[clean["Action"].astype(str).str.strip() != ""]
-    save_all_rows("Action_Items", active_poc_id, DISPLAY_ACT, clean)
-    st.success("Saved.")
-    st.rerun()
-
-st.divider()
-
-# ── POC Details (collapsible) ─────────────────────────────────────────────────
+# ── POC Details ───────────────────────────────────────────────────────────────
 with st.expander("POC Details", expanded=False):
-    editor_name = st.session_state.get("editor_name", "")
-    editor_role = st.session_state.get("editor_role", "Snowflake Team")
+    editor_name = st.session_state.get("editor_name","")
+    editor_role = st.session_state.get("editor_role","Snowflake Team")
 
     with st.form("overview_form"):
         st.markdown("**Contacts**")
-        champion      = st.text_input("Technical Champion",          value=ov.get("Technical Champion", ""))
-        champ_title   = st.text_input("Technical Champion Title",    value=ov.get("Technical Champion Title", ""))
-        sponsor       = st.text_input("Exec Business Sponsor",       value=ov.get("Exec Business Sponsor", ""))
-        sponsor_title = st.text_input("Exec Business Sponsor Title", value=ov.get("Exec Business Sponsor Title", ""))
-
-        participants = st.text_area(
-            "Customer Participants", value=ov.get("Customer Participants", ""),
-            height=70, placeholder="e.g. Jane Smith (Data Engineer), John Doe (IT Lead)…"
-        )
+        c1, c2 = st.columns(2)
+        with c1:
+            champion      = st.text_input("Technical Champion",          value=ov.get("Technical Champion",""))
+            champ_title   = st.text_input("Technical Champion Title",    value=ov.get("Technical Champion Title",""))
+        with c2:
+            sponsor       = st.text_input("Exec Business Sponsor",       value=ov.get("Exec Business Sponsor",""))
+            sponsor_title = st.text_input("Exec Business Sponsor Title", value=ov.get("Exec Business Sponsor Title",""))
+        participants = st.text_area("Customer Participants", value=ov.get("Customer Participants",""),
+                                    height=65, placeholder="Jane Smith (Data Engineer), John Doe (IT Lead)…")
 
         st.divider()
         st.markdown("**Engagement**")
@@ -471,36 +447,33 @@ with st.expander("POC Details", expanded=False):
         with e2:
             cloud    = st.selectbox("Cloud Environment", CLOUD_OPTIONS,
                                     index=CLOUD_OPTIONS.index(ov["Cloud Environment"]) if ov.get("Cloud Environment") in CLOUD_OPTIONS else 0)
-            platform = st.text_input("Current Data Platform", value=ov.get("Current Data Platform", ""))
-            volume   = st.text_input("Estimated Data Volume",  value=ov.get("Data Volume", ""))
-
-        saved_compliance = [c.strip() for c in ov.get("Compliance Requirements","").split(",") if c.strip()]
-        compliance = st.multiselect("Compliance Requirements", COMPLIANCE_OPTIONS,
-                                    default=[c for c in saved_compliance if c in COMPLIANCE_OPTIONS])
+            platform = st.text_input("Current Data Platform", value=ov.get("Current Data Platform",""))
+            volume   = st.text_input("Estimated Data Volume",  value=ov.get("Data Volume",""))
+        saved_c = [x.strip() for x in ov.get("Compliance Requirements","").split(",") if x.strip()]
+        compliance = st.multiselect("Compliance", COMPLIANCE_OPTIONS,
+                                    default=[x for x in saved_c if x in COMPLIANCE_OPTIONS])
 
         st.divider()
         st.markdown("**Timeline & Status**")
         t1, t2, t3 = st.columns(3)
         with t1:
-            try:    start_val = datetime.strptime(ov.get("POC Start Date",""), "%Y-%m-%d").date()
-            except: start_val = date.today()
-            start_date = st.date_input("POC Start Date", value=start_val)
+            try:    sv = datetime.strptime(ov.get("POC Start Date",""), "%Y-%m-%d").date()
+            except: sv = date.today()
+            start_date = st.date_input("Start Date", value=sv)
         with t2:
-            try:    end_val = datetime.strptime(ov.get("Target Completion Date",""), "%Y-%m-%d").date()
-            except: end_val = date.today()
-            end_date = st.date_input("Target Completion Date", value=end_val)
+            try:    ev = datetime.strptime(ov.get("Target Completion Date",""), "%Y-%m-%d").date()
+            except: ev = date.today()
+            end_date = st.date_input("Target Completion", value=ev)
         with t3:
             status = st.selectbox("POC Status", STATUS_OPTIONS,
                                   index=STATUS_OPTIONS.index(ov["Status"]) if ov.get("Status") in STATUS_OPTIONS else 0)
 
         st.divider()
         st.markdown("**Objectives**")
-        objective = st.text_area("POC Objective", value=ov.get("POC Objective",""), height=80)
-        sc1, sc2 = st.columns(2)
-        with sc1:
-            tech_criteria = st.text_area("Technical Success Criteria", value=ov.get("Technical Success Criteria",""), height=90)
-        with sc2:
-            biz_criteria  = st.text_area("Business Success Criteria",  value=ov.get("Business Success Criteria",""),  height=90)
+        objective = st.text_area("POC Objective", value=ov.get("POC Objective",""), height=70)
+        o1, o2 = st.columns(2)
+        with o1: tc = st.text_area("Technical Success Criteria", value=ov.get("Technical Success Criteria",""), height=80)
+        with o2: bc = st.text_area("Business Success Criteria",  value=ov.get("Business Success Criteria",""),  height=80)
 
         st.divider()
         st.markdown("**Budget**")
@@ -512,14 +485,12 @@ with st.expander("POC Details", expanded=False):
             save_overview(active_poc_id, {
                 "Technical Champion": champion, "Technical Champion Title": champ_title,
                 "Exec Business Sponsor": sponsor, "Exec Business Sponsor Title": sponsor_title,
-                "Customer Participants": participants,
-                "Business Unit": bu,
+                "Customer Participants": participants, "Business Unit": bu,
                 "Cloud Environment": cloud, "Current Data Platform": platform, "Data Volume": volume,
                 "Compliance Requirements": ", ".join(compliance),
                 "POC Start Date": str(start_date), "Target Completion Date": str(end_date),
                 "Status": status, "POC Objective": objective,
-                "Technical Success Criteria": tech_criteria, "Business Success Criteria": biz_criteria,
+                "Technical Success Criteria": tc, "Business Success Criteria": bc,
                 "POC Budget ($)": poc_budget, "Confirmed Spend ($)": conf_spend,
             })
-            st.success(f"Saved by {editor_name or editor_role}.")
-            st.rerun()
+            st.success(f"Saved by {editor_name or editor_role}."); st.rerun()
