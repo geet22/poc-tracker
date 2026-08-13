@@ -31,6 +31,7 @@ OVERVIEW_HEADERS = [
     "Snowflake AE", "Snowflake SE",
     "Labcorp Champion", "Champion Title", "Champion Email",
     "Executive Sponsor", "Sponsor Title",
+    "Customer Participants",
     "Business Unit", "Primary Use Case", "Secondary Use Case",
     "Cloud Environment", "Current Data Platform", "Data Volume",
     "Compliance Requirements",
@@ -555,6 +556,13 @@ with tab1:
             sponsor     = st.text_input("Executive Sponsor",      value=ov.get("Executive Sponsor", ""))
             sponsor_title = st.text_input("Exec Sponsor Title",   value=ov.get("Sponsor Title", ""))
 
+        participants = st.text_area(
+            "Customer Participants",
+            value=ov.get("Customer Participants", ""),
+            height=80,
+            placeholder="e.g. Jane Smith (Data Engineer), John Doe (IT Lead)…",
+        )
+
         st.divider()
         st.markdown("### Engagement Details")
         e1, e2 = st.columns(2)
@@ -611,6 +619,7 @@ with tab1:
                 "Snowflake AE": ae, "Snowflake SE": se,
                 "Labcorp Champion": champion, "Champion Title": champ_title, "Champion Email": champ_email,
                 "Executive Sponsor": sponsor, "Sponsor Title": sponsor_title,
+                "Customer Participants": participants,
                 "Business Unit": bu, "Primary Use Case": uc, "Secondary Use Case": uc2,
                 "Cloud Environment": cloud, "Current Data Platform": platform, "Data Volume": volume,
                 "Compliance Requirements": ", ".join(compliance),
