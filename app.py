@@ -390,6 +390,8 @@ for col in DISPLAY_KPI:
 kpi_df = kpi_df[DISPLAY_KPI]
 for col in DISPLAY_KPI:
     kpi_df[col] = kpi_df[col].astype(str).replace("nan", "")
+# Append blank rows so users can type new entries directly in the grid
+kpi_df = pd.concat([kpi_df, pd.DataFrame([{c: "" for c in DISPLAY_KPI}] * 3)], ignore_index=True)
 
 edited_kpis = ag_table(kpi_df, {
     "KPI":           {"flex": 3},
@@ -421,6 +423,7 @@ for col in DISPLAY_ACT:
 act_df = act_df[DISPLAY_ACT]
 for col in DISPLAY_ACT:
     act_df[col] = act_df[col].astype(str).replace("nan", "")
+act_df = pd.concat([act_df, pd.DataFrame([{c: "" for c in DISPLAY_ACT}] * 3)], ignore_index=True)
 
 edited_actions = ag_table(act_df, {
     "Action":   {"flex": 3},
