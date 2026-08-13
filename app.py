@@ -421,7 +421,6 @@ def render_summary_bar(ov: dict, kpis: pd.DataFrame, actions: pd.DataFrame):
     arr_str = f"${int(arr):,}" if str(arr).isdigit() else (f"${arr}" if arr else "—")
     chips = [
         (f"{status_badge(status)}", ""),
-        (f"💰 ARR: {arr_str}", "green"),
         (f"✅ KPIs Met: {met}/{total_kpi}", "green" if met==total_kpi else ""),
         (f"📋 Actions: {done} done · {inprog} in progress · {open_} open", "amber" if open_ > 0 else "green"),
     ]
@@ -601,13 +600,10 @@ with tab1:
             biz_criteria  = st.text_area("Business Success Criteria",  value=ov.get("Business Success Criteria", ""),  height=100)
 
         st.divider()
-        st.markdown("### Budget & Funding")
-        b1, b2, b3 = st.columns(3)
+        st.markdown("### Budget")
+        b1, b2 = st.columns(2)
         with b1: poc_budget = st.text_input("POC Budget ($)",      value=ov.get("POC Budget ($)", ""))
         with b2: conf_spend = st.text_input("Confirmed Spend ($)", value=ov.get("Confirmed Spend ($)", ""))
-        with b3: arr        = st.text_input("Potential ARR ($)",   value=ov.get("Potential ARR ($)", ""))
-        proc_contact = st.text_input("Procurement Contact", value=ov.get("Procurement Contact", ""))
-        budget_notes = st.text_area("Budget Notes",         value=ov.get("Budget Notes", ""), height=60)
 
         submitted = st.form_submit_button("💾  Save Overview", type="primary", use_container_width=True)
         if submitted:
@@ -622,8 +618,6 @@ with tab1:
                 "Status": status, "POC Objective": objective,
                 "Technical Success Criteria": tech_criteria, "Business Success Criteria": biz_criteria,
                 "POC Budget ($)": poc_budget, "Confirmed Spend ($)": conf_spend,
-                "Potential ARR ($)": arr, "Procurement Contact": proc_contact,
-                "Budget Notes": budget_notes,
             })
             st.success(f"Saved by {editor_name or editor_role}.")
             st.rerun()
@@ -671,19 +665,16 @@ with tab2:
     st.divider()
 
     # Budget summary (edit via Overview tab)
-    st.subheader("Budget Summary")
+    st.subheader("Budget")
 
     def fmt_money(v):
         try: return f"${int(v):,}"
         except: return f"${v}" if v else "—"
 
-    bm1, bm2, bm3 = st.columns(3)
+    bm1, bm2 = st.columns(2)
     with bm1: st.metric("POC Budget",      fmt_money(ov.get("POC Budget ($)", "")))
     with bm2: st.metric("Confirmed Spend", fmt_money(ov.get("Confirmed Spend ($)", "")))
-    with bm3: st.metric("Potential ARR",   fmt_money(ov.get("Potential ARR ($)", "")))
-    if ov.get("Budget Notes"):
-        st.caption(f"📌 {ov['Budget Notes']}")
-    st.caption("To edit budget figures, go to the Overview tab.")
+    st.caption("To edit, go to the Overview tab.")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
