@@ -362,15 +362,18 @@ for col in DISPLAY_KPI:
     if col not in kpi_df.columns:
         kpi_df[col] = ""
 kpi_df = kpi_df[DISPLAY_KPI]
+# Ensure all columns are plain strings so data_editor renders every cell as editable
+for col in DISPLAY_KPI:
+    kpi_df[col] = kpi_df[col].astype(str).replace("nan", "")
 
 edited_kpis = st.data_editor(
     kpi_df, num_rows="dynamic", use_container_width=True, hide_index=True,
     column_config={
         "KPI":           st.column_config.TextColumn("KPI",     width=260),
-        "Target":        st.column_config.TextColumn("Target",  width=90),
-        "Current Value": st.column_config.TextColumn("Current", width=90),
-        "Unit":          st.column_config.TextColumn("Unit",    width=70),
-        "Status":        st.column_config.SelectboxColumn("Status", options=KPI_STATUSES, width=120),
+        "Target":        st.column_config.TextColumn("Target",  width=100),
+        "Current Value": st.column_config.TextColumn("Current Value", width=130),
+        "Unit":          st.column_config.TextColumn("Unit",    width=80),
+        "Status":        st.column_config.SelectboxColumn("Status", options=KPI_STATUSES, width=130),
         "Notes":         st.column_config.TextColumn("Notes",   width=220),
     },
     key="kpi_editor",
@@ -393,6 +396,9 @@ for col in DISPLAY_ACT:
     if col not in act_df.columns:
         act_df[col] = ""
 act_df = act_df[DISPLAY_ACT]
+# Cast text columns to string before date coercion
+for col in [c for c in DISPLAY_ACT if c != "Due Date"]:
+    act_df[col] = act_df[col].astype(str).replace("nan", "")
 act_df["Due Date"] = pd.to_datetime(act_df["Due Date"], errors="coerce").dt.date
 
 edited_actions = st.data_editor(
