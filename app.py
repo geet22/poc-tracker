@@ -24,11 +24,10 @@ SCOPES = [
 ]
 
 # ── Headers ───────────────────────────────────────────────────────────────────
-REGISTRY_HEADERS = ["POC_ID", "Customer", "Engagement", "AE", "SE", "Status", "Created"]
+REGISTRY_HEADERS = ["POC_ID", "Customer", "Engagement", "Status", "Created"]
 
 OVERVIEW_HEADERS = [
     "POC_ID",
-    "Snowflake AE", "Snowflake SE",
     "Technical Champion", "Technical Champion Title",
     "Exec Business Sponsor", "Exec Business Sponsor Title",
     "Customer Participants",
@@ -127,9 +126,9 @@ def save_overview(poc_id: str, values: dict):
     ws.append_row(row)
     st.cache_data.clear()
 
-def create_poc(poc_id, customer, engagement, ae, se, status):
+def create_poc(poc_id, customer, engagement, status):
     get_ss().worksheet("POC_Registry").append_row(
-        [poc_id, customer, engagement, ae, se, status, datetime.today().strftime("%Y-%m-%d")]
+        [poc_id, customer, engagement, status, datetime.today().strftime("%Y-%m-%d")]
     )
     st.cache_data.clear()
 
@@ -312,7 +311,6 @@ with st.sidebar:
                        format_func=lambda i: labels[i], key="poc_radio")
         active_poc_id = poc_options[idx]
         active_row    = registry[registry["POC_ID"] == active_poc_id].iloc[0]
-        st.caption(f"AE: {active_row.get('AE','')}  ·  SE: {active_row.get('SE','')}")
     else:
         st.info("No POCs yet.")
         active_poc_id = None
@@ -323,13 +321,11 @@ with st.sidebar:
         with st.form("new_poc_form"):
             np_cust = st.text_input("Customer Name *")
             np_eng  = st.text_input("Engagement / BU")
-            np_ae   = st.text_input("Snowflake AE")
-            np_se   = st.text_input("Snowflake SE")
             np_st   = st.selectbox("Status", STATUS_OPTIONS)
             if st.form_submit_button("Create", type="primary"):
                 if np_cust.strip():
                     slug = (np_cust.strip() + "-" + np_eng.strip()).lower().replace(" ","-").replace("·","").replace("/","")[:32]
-                    create_poc(slug, np_cust.strip(), np_eng.strip(), np_ae, np_se, np_st)
+                    create_poc(slug, np_cust.strip(), np_eng.strip(), np_st)
                     st.success(f"Created: {np_cust}")
                     st.rerun()
                 else:
@@ -453,19 +449,10 @@ with st.expander("POC Details", expanded=False):
 
     with st.form("overview_form"):
         st.markdown("**Contacts**")
-        sf_col, cust_col = st.columns(2)
-
-        with sf_col:
-            st.caption("Snowflake Team")
-            ae = st.text_input("Account Executive", value=ov.get("Snowflake AE", ""))
-            se = st.text_input("Solutions Engineer", value=ov.get("Snowflake SE", ""))
-
-        with cust_col:
-            st.caption("Customer")
-            champion      = st.text_input("Technical Champion",          value=ov.get("Technical Champion", ""))
-            champ_title   = st.text_input("Technical Champion Title",    value=ov.get("Technical Champion Title", ""))
-            sponsor       = st.text_input("Exec Business Sponsor",       value=ov.get("Exec Business Sponsor", ""))
-            sponsor_title = st.text_input("Exec Business Sponsor Title", value=ov.get("Exec Business Sponsor Title", ""))
+        champion      = st.text_input("Technical Champion",          value=ov.get("Technical Champion", ""))
+        champ_title   = st.text_input("Technical Champion Title",    value=ov.get("Technical Champion Title", ""))
+        sponsor       = st.text_input("Exec Business Sponsor",       value=ov.get("Exec Business Sponsor", ""))
+        sponsor_title = st.text_input("Exec Business Sponsor Title", value=ov.get("Exec Business Sponsor Title", ""))
 
         participants = st.text_area(
             "Customer Participants", value=ov.get("Customer Participants", ""),
@@ -520,7 +507,6 @@ with st.expander("POC Details", expanded=False):
 
         if st.form_submit_button("Save Details", type="primary", use_container_width=True):
             save_overview(active_poc_id, {
-                "Snowflake AE": ae, "Snowflake SE": se,
                 "Technical Champion": champion, "Technical Champion Title": champ_title,
                 "Exec Business Sponsor": sponsor, "Exec Business Sponsor Title": sponsor_title,
                 "Customer Participants": participants,
