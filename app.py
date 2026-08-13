@@ -112,7 +112,7 @@ def load_registry() -> pd.DataFrame:
 @st.cache_data(ttl=300)
 def load_overview(poc_id: str) -> dict:
     ws = get_ss().worksheet("Overview")
-    rows = ws.get_all_records(expected_headers=OVERVIEW_HEADERS)
+    rows = ws.get_all_records()
     for r in rows:
         if r.get("POC_ID") == poc_id:
             return r
