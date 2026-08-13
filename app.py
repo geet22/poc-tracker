@@ -672,6 +672,7 @@ with tab3:
         if col not in act_edit_df.columns:
             act_edit_df[col] = ""
     act_edit_df = act_edit_df[DISPLAY_ACT]
+    act_edit_df["Due Date"] = pd.to_datetime(act_edit_df["Due Date"], errors="coerce").dt.date
 
     edited_actions = st.data_editor(
         act_edit_df,
@@ -710,6 +711,7 @@ with tab4:
         if col not in tl_edit_df.columns:
             tl_edit_df[col] = ""
     tl_edit_df = tl_edit_df[DISPLAY_TL]
+    tl_edit_df["Due Date"] = pd.to_datetime(tl_edit_df["Due Date"], errors="coerce").dt.date
 
     edited_timeline = st.data_editor(
         tl_edit_df,
