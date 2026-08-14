@@ -5,16 +5,6 @@ import pandas as pd
 from datetime import datetime, date
 import time
 
-def _retry(fn, retries=3, wait=8):
-    for attempt in range(retries):
-        try:
-            return fn()
-        except gspread.exceptions.APIError as e:
-            if "429" in str(e) and attempt < retries - 1:
-                time.sleep(wait * (attempt + 1))
-            else:
-                raise
-
 st.set_page_config(page_title="POC Tracker", layout="wide", initial_sidebar_state="expanded")
 
 SCOPES = [
@@ -45,7 +35,118 @@ KPI_STATUSES       = ["On Track", "At Risk", "Met", "Not Started"]
 ACTION_CATS        = ["Technical", "Business", "Compliance", "Training", "Executive"]
 ACTION_STATUSES    = ["Open", "In Progress", "Complete", "Blocked"]
 CLOUD_OPTIONS      = ["AWS", "Azure", "Multi-Cloud"]
-STATUS_EMOJI       = {"Planning":"🔵","Active":"🟢","At Risk":"🟡","Completed — Won":"✅","Completed — Lost":"🔴"}
+
+STATUS_BADGE = {
+    "Planning":        "🔵 Planning",
+    "Active":          "🟢 Active",
+    "At Risk":         "🟡 At Risk",
+    "Completed — Won": "✅ Won",
+    "Completed — Lost":"🔴 Lost",
+}
+STATUS_EMOJI = {"Planning":"🔵","Active":"🟢","At Risk":"🟡","Completed — Won":"✅","Completed — Lost":"🔴"}
+
+# ── CSS ───────────────────────────────────────────────────────────────────────
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+html, body, .stApp { font-family: 'Inter', sans-serif !important; }
+#MainMenu, footer, .stDeployButton { display: none !important; }
+
+/* Sidebar dark theme */
+[data-testid="stSidebar"] { background: #0F172A !important; }
+[data-testid="stSidebar"] p,
+[data-testid="stSidebar"] span,
+[data-testid="stSidebar"] label { color: #94A3B8 !important; }
+[data-testid="stSidebar"] h1,
+[data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3,
+[data-testid="stSidebar"] strong { color: #F1F5F9 !important; }
+[data-testid="stSidebar"] hr { border-color: #1E293B !important; }
+[data-testid="stSidebar"] input { background: rgba(255,255,255,.06) !important; color: #F1F5F9 !important; border-color: #1E293B !important; }
+[data-testid="stSidebar"] .stRadio label {
+    border: 1px solid #1E293B !important; border-radius: 8px !important;
+    padding: 7px 12px !important; margin-bottom: 3px !important; color: #94A3B8 !important;
+}
+[data-testid="stSidebar"] .stRadio label:hover {
+    background: rgba(41,181,232,.08) !important; border-color: #29B5E8 !important;
+}
+
+/* Page */
+.block-container { max-width: 1400px !important; padding: 1.2rem 2rem 3rem !important; }
+
+/* Tabs */
+.stTabs [data-baseweb="tab-list"] { border-bottom: 2px solid #E2E8F0; background: transparent; gap: 0; }
+.stTabs [data-baseweb="tab"] {
+    background: transparent; border-radius: 0; color: #64748B;
+    font-weight: 500; font-size: .9rem; padding: 10px 22px;
+    border-bottom: 2px solid transparent; margin-bottom: -2px;
+}
+.stTabs [aria-selected="true"] {
+    color: #29B5E8 !important; border-bottom: 2px solid #29B5E8 !important;
+    background: transparent !important;
+}
+
+/* Metric cards */
+[data-testid="metric-container"] {
+    background: #fff; border: 1px solid #E2E8F0; border-radius: 12px;
+    padding: 16px 20px; box-shadow: 0 1px 4px rgba(0,0,0,.05);
+}
+[data-testid="stMetricLabel"] { font-size: .68rem !important; font-weight: 700 !important; text-transform: uppercase !important; letter-spacing: .07em !important; color: #94A3B8 !important; }
+[data-testid="stMetricValue"] { font-size: 1.45rem !important; font-weight: 700 !important; color: #0F172A !important; }
+[data-testid="stMetricDelta"] { font-size: .72rem !important; }
+
+/* Bordered containers → white cards */
+[data-testid="stVerticalBlockBorderWrapper"] {
+    background: #fff !important; border: 1px solid #E2E8F0 !important;
+    border-radius: 12px !important; box-shadow: 0 1px 4px rgba(0,0,0,.05) !important;
+}
+[data-testid="stVerticalBlockBorderWrapper"] > div > [data-testid="stVerticalBlock"] {
+    padding: 18px 22px !important;
+}
+
+/* Inputs */
+.stTextInput input, .stTextArea textarea, .stSelectbox > div > div {
+    border-radius: 8px !important; border-color: #E2E8F0 !important;
+    background: #FAFBFC !important; font-size: .84rem !important;
+}
+.stTextInput input:focus, .stTextArea textarea:focus {
+    border-color: #29B5E8 !important; box-shadow: 0 0 0 3px rgba(41,181,232,.12) !important;
+    background: #fff !important;
+}
+
+/* Buttons */
+.stButton > button[kind="primary"] {
+    background: #29B5E8 !important; color: #0F172A !important; border: none !important;
+    border-radius: 8px !important; font-weight: 600 !important;
+}
+.stButton > button {
+    border-radius: 8px !important; font-size: .84rem !important; font-weight: 500 !important;
+}
+
+/* Progress */
+.stProgress > div > div { background: #29B5E8 !important; border-radius: 4px !important; height: 6px !important; }
+.stProgress > div { background: #E2E8F0 !important; border-radius: 4px !important; height: 6px !important; }
+
+/* Data editor */
+[data-testid="stDataEditor"] { border-radius: 8px !important; }
+
+/* Dividers */
+hr { border-color: #EEF0F3 !important; margin: 6px 0 !important; }
+</style>
+""", unsafe_allow_html=True)
+
+
+# ── Retry wrapper ─────────────────────────────────────────────────────────────
+def _retry(fn, retries=3, wait=8):
+    for attempt in range(retries):
+        try:
+            return fn()
+        except gspread.exceptions.APIError as e:
+            if "429" in str(e) and attempt < retries - 1:
+                time.sleep(wait * (attempt + 1))
+            else:
+                raise
+
 
 # ── Sheets ────────────────────────────────────────────────────────────────────
 @st.cache_resource
@@ -93,7 +194,7 @@ def load_kpis(poc_id):
     df = pd.DataFrame(data) if data else pd.DataFrame(columns=KPI_HEADERS)
     if not df.empty and "POC_ID" in df.columns:
         return df[df["POC_ID"] == poc_id].drop(columns=["POC_ID"])
-    return df
+    return pd.DataFrame(columns=[h for h in KPI_HEADERS if h != "POC_ID"])
 
 @st.cache_data(ttl=300)
 def load_actions(poc_id):
@@ -101,7 +202,8 @@ def load_actions(poc_id):
     df = pd.DataFrame(data) if data else pd.DataFrame(columns=ACTION_HEADERS)
     if not df.empty and "POC_ID" in df.columns:
         return df[df["POC_ID"] == poc_id].drop(columns=["POC_ID"])
-    return df
+    return pd.DataFrame(columns=[h for h in ACTION_HEADERS if h != "POC_ID"])
+
 
 def save_overview(poc_id, values):
     ws = get_ss().worksheet("Overview")
@@ -109,9 +211,12 @@ def save_overview(poc_id, values):
     row = [poc_id] + [values.get(h, "") for h in OVERVIEW_HEADERS[1:]]
     for i, r in enumerate(rows[1:], start=2):
         if r and r[0] == poc_id:
-            ws.delete_rows(i); ws.insert_row(row, i)
-            st.cache_data.clear(); return
-    ws.append_row(row); st.cache_data.clear()
+            ws.delete_rows(i)
+            ws.insert_row(row, i)
+            st.cache_data.clear()
+            return
+    ws.append_row(row)
+    st.cache_data.clear()
 
 def create_poc(poc_id, customer, engagement, status):
     get_ss().worksheet("POC_Registry").append_row(
@@ -122,375 +227,366 @@ def create_poc(poc_id, customer, engagement, status):
 def save_all_rows(sheet, poc_id, headers, df):
     ws = get_ss().worksheet(sheet)
     vals = ws.get_all_values()
-    for n in reversed([i+2 for i, r in enumerate(vals[1:]) if r and r[0] == poc_id]):
+    for n in reversed([i + 2 for i, r in enumerate(vals[1:]) if r and r[0] == poc_id]):
         ws.delete_rows(n)
     for _, row in df.iterrows():
-        ws.append_row([poc_id]+[str(row.get(h,"")) for h in headers], value_input_option="USER_ENTERED")
+        ws.append_row([poc_id] + [str(row.get(h, "")) for h in headers], value_input_option="USER_ENTERED")
     st.cache_data.clear()
+
+
+def parse_date(v):
+    try:
+        return datetime.strptime(str(v), "%Y-%m-%d").date()
+    except Exception:
+        return date.today()
+
+def fmt_money(v):
+    try:
+        return f"${int(str(v).replace(',', '').replace('$', '')):,}"
+    except Exception:
+        return f"${v}" if v else "—"
+
+def prep_edit_df(df, cols):
+    """Return a clean copy of df with exactly the given columns."""
+    result = df.copy() if not df.empty else pd.DataFrame(columns=cols)
+    for c in cols:
+        if c not in result.columns:
+            result[c] = ""
+    return result[cols].astype(str).replace("nan", "").replace("None", "")
+
 
 # ── Bootstrap ─────────────────────────────────────────────────────────────────
 try:
     _retry(ensure_sheets)
 except Exception as e:
-    st.error(f"Could not connect to Google Sheets: {e}"); st.stop()
+    st.error(f"Could not connect to Google Sheets: {e}")
+    st.stop()
 
-# ── Styles ────────────────────────────────────────────────────────────────────
-st.html("""
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<style>
-*, html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
-#MainMenu, footer, header { visibility:hidden; height:0; }
-
-/* Page background */
-[data-testid="stAppViewContainer"] > .main { background:#EBEDF0 !important; }
-.block-container { padding:0.6rem 1.4rem 2rem !important; max-width:1300px; }
-
-/* Vertical rhythm */
-[data-testid="stVerticalBlock"] { gap:0.45rem !important; }
-
-/* Bordered containers become white cards */
-[data-testid="stVerticalBlockBorderWrapper"] {
-    background:#fff !important;
-    border:1px solid #DDE1E7 !important;
-    border-radius:10px !important;
-    box-shadow:0 1px 3px rgba(0,0,0,.06) !important;
-    padding:0 !important;
-}
-[data-testid="stVerticalBlockBorderWrapper"] > div > [data-testid="stVerticalBlock"] {
-    padding:16px 20px !important; gap:0.6rem !important;
-}
-
-/* Sidebar */
-section[data-testid="stSidebar"] { background:#0F172A !important; border-right:1px solid #1E293B !important; width:230px !important; }
-section[data-testid="stSidebar"] p, section[data-testid="stSidebar"] span,
-section[data-testid="stSidebar"] small, section[data-testid="stSidebar"] div,
-section[data-testid="stSidebar"] label { color:#94A3B8 !important; }
-section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] h2,
-section[data-testid="stSidebar"] h3, section[data-testid="stSidebar"] strong { color:#F1F5F9 !important; }
-section[data-testid="stSidebar"] hr { border-color:#1E293B !important; margin:8px 0 !important; }
-section[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label {
-    background:rgba(255,255,255,.03) !important; border:1px solid #1E293B !important;
-    border-radius:6px !important; padding:7px 12px !important; margin-bottom:3px !important;
-    font-size:.8rem !important; color:#CBD5E1 !important;
-}
-section[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:hover {
-    background:rgba(41,181,232,.08) !important; border-color:#29B5E8 !important;
-}
-section[data-testid="stSidebar"] input[type="text"] {
-    background:rgba(255,255,255,.05) !important; border:1px solid #1E293B !important;
-    color:#F1F5F9 !important; border-radius:6px !important; font-size:.82rem !important;
-}
-section[data-testid="stSidebar"] button[kind="primaryFormSubmit"],
-section[data-testid="stSidebar"] button[kind="primary"] {
-    background:#29B5E8 !important; color:#0F172A !important; border:none !important;
-    border-radius:6px !important; font-weight:600 !important; font-size:.78rem !important;
-}
-
-/* Buttons */
-.stButton > button[kind="primary"] {
-    background:#29B5E8 !important; color:#0F172A !important; border:none !important;
-    border-radius:6px !important; font-weight:600 !important; font-size:.75rem !important;
-    padding:5px 14px !important; height:30px !important; line-height:1 !important;
-}
-.stButton > button {
-    border-radius:6px !important; font-size:.75rem !important; font-weight:500 !important;
-    height:30px !important; padding:5px 12px !important;
-}
-
-/* Inputs */
-.stTextInput input, .stTextArea textarea, .stSelectbox > div > div {
-    border-radius:6px !important; border:1px solid #DDE1E7 !important;
-    font-size:.83rem !important; background:#FAFBFC !important;
-}
-.stTextInput input:focus, .stTextArea textarea:focus {
-    border-color:#29B5E8 !important; box-shadow:0 0 0 3px rgba(41,181,232,.1) !important;
-    background:#fff !important;
-}
-
-/* Expander */
-[data-testid="stExpander"] summary {
-    font-size:.8rem !important; font-weight:600 !important; color:#374151 !important;
-    background:#F9FAFB !important; border-radius:7px !important; padding:10px 14px !important;
-    border:1px solid #DDE1E7 !important;
-}
-[data-testid="stExpander"] { border:none !important; background:transparent !important; }
-
-/* Dividers */
-hr { border-color:#EEF0F3 !important; margin:4px 0 !important; }
-
-/* Stat row */
-.stat-row { display:flex; gap:8px; margin:4px 0 8px; flex-wrap:wrap; }
-.stat-card {
-    flex:1 1 110px; background:#fff; border:1px solid #DDE1E7;
-    border-radius:8px; padding:11px 15px; min-width:105px;
-    box-shadow:0 1px 2px rgba(0,0,0,.04);
-}
-.stat-label { font-size:.6rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:#9CA3AF; margin-bottom:4px; }
-.stat-value { font-size:1.35rem; font-weight:700; color:#111827; line-height:1.1; }
-.stat-value-sm { font-size:.95rem; font-weight:700; color:#111827; }
-.stat-sub { font-size:.65rem; color:#9CA3AF; margin-top:2px; }
-
-/* Pills */
-.pill { display:inline-block; font-size:.68rem; font-weight:600; padding:2px 9px; border-radius:20px; letter-spacing:.02em; }
-.p-green { background:#D1FAE5; color:#065F46; }
-.p-blue  { background:#DBEAFE; color:#1E40AF; }
-.p-amber { background:#FEF3C7; color:#92400E; }
-.p-red   { background:#FEE2E2; color:#991B1B; }
-.p-gray  { background:#F3F4F6; color:#374151; }
-
-/* Card heading row */
-.ch { display:flex; justify-content:space-between; align-items:center; margin-bottom:2px; }
-.ch-title { font-size:.78rem; font-weight:700; color:#111827; letter-spacing:-.01em; }
-.ch-sub   { font-size:.7rem; color:#9CA3AF; }
-</style>
-""")
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-_PILL = {
-    "Planning":"p-gray","Active":"p-blue","At Risk":"p-amber",
-    "Completed — Won":"p-green","Completed — Lost":"p-red",
-    "Met":"p-green","On Track":"p-blue","Not Started":"p-gray",
-    "Complete":"p-green","In Progress":"p-blue","Open":"p-gray","Blocked":"p-red",
-}
-def pill(t): return f'<span class="pill {_PILL.get(t,"p-gray")}">{t}</span>'
-
-def fmt_money(v):
-    try: return f"${int(str(v).replace(',','').replace('$','')):,}"
-    except: return f"${v}" if v else "—"
-
-def prep_df(df, cols):
-    """Ensure all cols exist, cast to str, append blank rows for editing."""
-    for c in cols:
-        if c not in df.columns: df[c] = ""
-    df = df[cols].copy()
-    for c in cols:
-        df[c] = df[c].astype(str).replace("nan", "")
-    blank = pd.DataFrame([{c: "" for c in cols}] * 3)
-    return pd.concat([df, blank], ignore_index=True)
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 registry = load_registry()
 
 with st.sidebar:
-    st.markdown("**POC Tracker**")
+    st.markdown(
+        """
+        <div style="padding:6px 0 14px; display:flex; align-items:center; gap:10px;">
+            <div style="width:34px;height:34px;background:#29B5E8;border-radius:8px;
+                        display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <svg width="18" height="18" viewBox="0 0 32 32" fill="none">
+                    <path d="M16 4L4 10v12l12 6 12-6V10L16 4z" stroke="white" stroke-width="2"
+                          stroke-linejoin="round" fill="none"/>
+                    <path d="M4 10l12 6 12-6" stroke="white" stroke-width="2" stroke-linejoin="round"/>
+                    <path d="M16 16v10" stroke="white" stroke-width="2"/>
+                </svg>
+            </div>
+            <div>
+                <div style="color:#F1F5F9;font-weight:700;font-size:.92rem;line-height:1.1;">POC Tracker</div>
+                <div style="color:#475569;font-size:.7rem;">Snowflake</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     st.divider()
 
-    for k, d in [("editor_name",""),("editor_role","Snowflake Team")]:
-        if k not in st.session_state: st.session_state[k] = d
+    for k, d in [("editor_name", ""), ("editor_role", "Snowflake Team")]:
+        if k not in st.session_state:
+            st.session_state[k] = d
 
-    st.markdown("<small>Editing as</small>", unsafe_allow_html=True)
+    st.markdown('<div style="font-size:.7rem;color:#475569;font-weight:600;text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px;">Editing as</div>', unsafe_allow_html=True)
     st.session_state["editor_name"] = st.text_input(
         "name", value=st.session_state["editor_name"],
-        placeholder="Your name", label_visibility="collapsed"
+        placeholder="Your name", label_visibility="collapsed",
     )
     st.session_state["editor_role"] = st.radio(
-        "role", ["Snowflake Team","Customer"],
-        index=0 if st.session_state["editor_role"]=="Snowflake Team" else 1,
-        horizontal=True, label_visibility="collapsed"
+        "role", ["Snowflake Team", "Customer"],
+        index=0 if st.session_state["editor_role"] == "Snowflake Team" else 1,
+        horizontal=True, label_visibility="collapsed",
     )
     st.divider()
 
     poc_options = registry["POC_ID"].tolist() if not registry.empty else []
     if poc_options:
+        st.markdown('<div style="font-size:.7rem;color:#475569;font-weight:600;text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px;">Engagements</div>', unsafe_allow_html=True)
         labels = []
         for _, r in registry.iterrows():
-            e = STATUS_EMOJI.get(r.get("Status",""),"⚪")
-            eng = r.get("Engagement","")
-            labels.append(f"{e} {r['Customer']}" + (f" · {eng}" if eng else ""))
-        idx = st.radio("Engagements", range(len(poc_options)),
-                       format_func=lambda i: labels[i], key="poc_radio",
-                       label_visibility="collapsed")
+            e = STATUS_EMOJI.get(r.get("Status", ""), "⚪")
+            eng = r.get("Engagement", "")
+            labels.append(f"{e}  {r['Customer']}" + (f"  ·  {eng}" if eng else ""))
+        idx = st.radio(
+            "Engagements", range(len(poc_options)),
+            format_func=lambda i: labels[i], key="poc_radio",
+            label_visibility="collapsed",
+        )
         active_poc_id = poc_options[idx]
-        active_row    = registry[registry["POC_ID"]==active_poc_id].iloc[0]
+        active_row = registry[registry["POC_ID"] == active_poc_id].iloc[0]
     else:
         st.info("No POCs yet.")
         active_poc_id = None
-        active_row    = {}
+        active_row = {}
 
     st.divider()
     with st.expander("＋ New POC", expanded=not poc_options):
         with st.form("new_poc"):
-            c = st.text_input("Customer *")
-            e = st.text_input("Engagement / BU")
-            s = st.selectbox("Status", STATUS_OPTIONS)
-            if st.form_submit_button("Create", type="primary"):
-                if c.strip():
-                    slug = (c.strip()+"-"+e.strip()).lower().replace(" ","-").replace("·","").replace("/","")[:32]
-                    create_poc(slug, c.strip(), e.strip(), s)
-                    st.success(f"Created"); st.rerun()
+            c_in = st.text_input("Customer *", placeholder="Acme Corp")
+            e_in = st.text_input("Engagement / BU", placeholder="Data Platform POC")
+            s_in = st.selectbox("Status", STATUS_OPTIONS)
+            if st.form_submit_button("Create POC", type="primary", use_container_width=True):
+                if c_in.strip():
+                    slug = (c_in.strip() + "-" + e_in.strip()).lower().replace(" ", "-").replace("·", "").replace("/", "")[:32]
+                    with st.spinner("Creating…"):
+                        create_poc(slug, c_in.strip(), e_in.strip(), s_in)
+                    st.success("Created!")
+                    st.rerun()
                 else:
                     st.warning("Customer name required.")
+
 
 # ── Guard ─────────────────────────────────────────────────────────────────────
 if not active_poc_id:
     st.markdown("## POC Tracker")
-    st.info("Create your first engagement in the sidebar.")
+    st.info("Create your first engagement in the sidebar to get started.")
     st.stop()
 
-# ── Data ──────────────────────────────────────────────────────────────────────
+
+# ── Load data ─────────────────────────────────────────────────────────────────
 ov      = load_overview(active_poc_id)
 kpis    = load_kpis(active_poc_id)
 actions = load_actions(active_poc_id)
 
 customer_name   = active_row.get("Customer", active_poc_id)
-engagement_name = active_row.get("Engagement","")
-poc_status      = ov.get("Status", active_row.get("Status",""))
+engagement_name = active_row.get("Engagement", "")
+poc_status      = ov.get("Status", active_row.get("Status", ""))
 
-kpis_met   = int((kpis["Status"]=="Met").sum())     if not kpis.empty    else 0
-kpis_total = len(kpis)
-acts_open  = int((actions["Status"]=="Open").sum()) if not actions.empty else 0
-acts_total = len(actions)
-
-# ── Header ────────────────────────────────────────────────────────────────────
-h1, h2 = st.columns([3, 1])
-with h1:
-    st.markdown(f"### {customer_name} × Snowflake")
-    if engagement_name:
-        st.caption(engagement_name)
-with h2:
-    if st.button("↺ Refresh", key="refresh"):
-        st.cache_data.clear(); st.rerun()
-
-st.html(f"""
-<div class="stat-row">
-  <div class="stat-card">
-    <div class="stat-label">Status</div>
-    <div style="margin-top:4px">{pill(poc_status) if poc_status else "—"}</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-label">KPIs Met</div>
-    <div class="stat-value">{kpis_met}<span style="font-size:.9rem;color:#D1D5DB;font-weight:500"> /{kpis_total}</span></div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-label">Actions Open</div>
-    <div class="stat-value">{acts_open}<span style="font-size:.9rem;color:#D1D5DB;font-weight:500"> /{acts_total}</span></div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-label">Budget</div>
-    <div class="stat-value-sm">{fmt_money(ov.get("POC Budget ($)",""))}</div>
-    <div class="stat-sub">Spent {fmt_money(ov.get("Confirmed Spend ($)",""))}</div>
-  </div>
-</div>
-""")
-
-# ── KPIs ──────────────────────────────────────────────────────────────────────
 DISPLAY_KPI = [h for h in KPI_HEADERS if h != "POC_ID"]
-kpi_df = prep_df(kpis.copy() if not kpis.empty else pd.DataFrame(columns=DISPLAY_KPI), DISPLAY_KPI)
-
-with st.container(border=True):
-    st.html('<div class="ch"><span class="ch-title">Key Performance Indicators</span><span class="ch-sub">Click any cell to edit · Save when done</span></div>')
-    edited_kpis = st.data_editor(
-        kpi_df, num_rows="dynamic", use_container_width=True, hide_index=True,
-        column_config={
-            "KPI":           st.column_config.TextColumn("KPI",     width="large"),
-            "Target":        st.column_config.TextColumn("Target",  width="small"),
-            "Current Value": st.column_config.TextColumn("Current", width="small"),
-            "Unit":          st.column_config.TextColumn("Unit",    width="small"),
-            "Status":        st.column_config.SelectboxColumn("Status", options=KPI_STATUSES, width="medium"),
-            "Notes":         st.column_config.TextColumn("Notes",   width="large"),
-        },
-        key="kpi_editor",
-    )
-    if st.button("Save KPIs", type="primary", key="save_kpis"):
-        clean = edited_kpis.dropna(how="all")
-        clean = clean[clean["KPI"].astype(str).str.strip() != ""]
-        save_all_rows("KPIs", active_poc_id, DISPLAY_KPI, clean)
-        st.success("Saved."); st.rerun()
-
-# ── Action Plan ───────────────────────────────────────────────────────────────
 DISPLAY_ACT = [h for h in ACTION_HEADERS if h != "POC_ID"]
-act_df = prep_df(actions.copy() if not actions.empty else pd.DataFrame(columns=DISPLAY_ACT), DISPLAY_ACT)
 
-with st.container(border=True):
-    st.html('<div class="ch"><span class="ch-title">Action Plan</span><span class="ch-sub">Click any cell to edit · Save when done</span></div>')
-    edited_actions = st.data_editor(
-        act_df, num_rows="dynamic", use_container_width=True, hide_index=True,
-        column_config={
-            "Action":   st.column_config.TextColumn("Action",   width="large"),
-            "Assignee": st.column_config.TextColumn("Assignee", width="medium"),
-            "Category": st.column_config.SelectboxColumn("Category", options=ACTION_CATS, width="medium"),
-            "Due Date": st.column_config.TextColumn("Due Date (YYYY-MM-DD)", width="medium"),
-            "Status":   st.column_config.SelectboxColumn("Status", options=ACTION_STATUSES, width="medium"),
-            "Notes":    st.column_config.TextColumn("Notes",    width="large"),
-        },
-        key="action_editor",
+kpis_met   = int((kpis["Status"] == "Met").sum())   if not kpis.empty else 0
+kpis_total = len(kpis)
+acts_open  = int((actions["Status"].isin(["Open", "In Progress"])).sum()) if not actions.empty else 0
+acts_blocked = int((actions["Status"] == "Blocked").sum()) if not actions.empty else 0
+
+today = date.today()
+overdue_count = 0
+if not actions.empty and "Due Date" in actions.columns:
+    for _, row in actions.iterrows():
+        try:
+            due = datetime.strptime(str(row["Due Date"]), "%Y-%m-%d").date()
+            if due < today and str(row.get("Status", "")) != "Complete":
+                overdue_count += 1
+        except Exception:
+            pass
+
+
+# ── Page header ───────────────────────────────────────────────────────────────
+h_left, h_right = st.columns([5, 1])
+with h_left:
+    subtitle = engagement_name or active_poc_id
+    st.markdown(
+        f'<div style="padding:2px 0 10px;">'
+        f'<div style="font-size:1.55rem;font-weight:700;color:#0F172A;line-height:1.2;">'
+        f'{customer_name} &times; Snowflake</div>'
+        f'<div style="font-size:.84rem;color:#64748B;margin-top:3px;">{subtitle}</div>'
+        f'</div>',
+        unsafe_allow_html=True,
     )
-    if st.button("Save Actions", type="primary", key="save_actions"):
-        clean = edited_actions.dropna(how="all")
-        clean = clean[clean["Action"].astype(str).str.strip() != ""]
-        save_all_rows("Action_Items", active_poc_id, DISPLAY_ACT, clean)
-        st.success("Saved."); st.rerun()
+with h_right:
+    st.markdown("<div style='margin-top:18px;'></div>", unsafe_allow_html=True)
+    if st.button("↺ Refresh", help="Reload from Google Sheets"):
+        with st.spinner("Refreshing…"):
+            st.cache_data.clear()
+        st.rerun()
 
-# ── POC Details ───────────────────────────────────────────────────────────────
-with st.expander("POC Details", expanded=False):
-    editor_name = st.session_state.get("editor_name","")
-    editor_role = st.session_state.get("editor_role","Snowflake Team")
+# ── Metric strip ──────────────────────────────────────────────────────────────
+m1, m2, m3, m4, m5 = st.columns(5)
+with m1:
+    st.metric("Status", STATUS_BADGE.get(poc_status, poc_status or "—"))
+with m2:
+    st.metric("KPIs Met", f"{kpis_met} / {kpis_total}")
+with m3:
+    pct = round(kpis_met / kpis_total * 100) if kpis_total else 0
+    st.metric("KPI Progress", f"{pct}%")
+with m4:
+    delta_txt = f"{overdue_count} overdue" if overdue_count else None
+    st.metric("Actions Open", str(acts_open), delta=delta_txt,
+              delta_color="inverse" if overdue_count else "normal")
+with m5:
+    budget  = fmt_money(ov.get("POC Budget ($)", ""))
+    spent   = fmt_money(ov.get("Confirmed Spend ($)", ""))
+    d_spent = f"Spent {spent}" if ov.get("Confirmed Spend ($)") else None
+    st.metric("Budget", budget, delta=d_spent, delta_color="off")
+
+if kpis_total > 0:
+    st.progress(kpis_met / kpis_total, text=f"{kpis_met} of {kpis_total} KPIs met")
+
+st.divider()
+
+
+# ── Tabs ──────────────────────────────────────────────────────────────────────
+tab_kpi, tab_actions, tab_details = st.tabs(["📊  KPIs", "✅  Action Plan", "📋  POC Details"])
+
+
+# ─── KPIs tab ─────────────────────────────────────────────────────────────────
+with tab_kpi:
+    kpi_edit_df = prep_edit_df(kpis, DISPLAY_KPI)
+
+    with st.container(border=True):
+        st.markdown("**Key Performance Indicators**")
+        st.caption("Click any cell to edit · Use the + button to add rows · Save when done.")
+
+        edited_kpis = st.data_editor(
+            kpi_edit_df,
+            num_rows="dynamic",
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "KPI":           st.column_config.TextColumn("KPI Description", width="large"),
+                "Target":        st.column_config.TextColumn("Target",          width="small"),
+                "Current Value": st.column_config.TextColumn("Current",         width="small"),
+                "Unit":          st.column_config.TextColumn("Unit",            width="small"),
+                "Status":        st.column_config.SelectboxColumn("Status",     options=KPI_STATUSES, width="medium"),
+                "Notes":         st.column_config.TextColumn("Notes",           width="large"),
+            },
+            key="kpi_editor",
+        )
+
+        if st.button("Save KPIs", type="primary", key="save_kpis"):
+            clean = edited_kpis.dropna(how="all")
+            clean = clean[clean["KPI"].astype(str).str.strip() != ""]
+            with st.spinner("Saving KPIs…"):
+                save_all_rows("KPIs", active_poc_id, DISPLAY_KPI, clean)
+            st.success("KPIs saved.")
+            st.rerun()
+
+
+# ─── Action Plan tab ──────────────────────────────────────────────────────────
+with tab_actions:
+    if overdue_count:
+        st.warning(f"{overdue_count} action item{'s are' if overdue_count > 1 else ' is'} past due date.")
+    if acts_blocked:
+        st.error(f"{acts_blocked} action item{'s are' if acts_blocked > 1 else ' is'} blocked.")
+
+    act_edit_df = prep_edit_df(actions, DISPLAY_ACT)
+
+    with st.container(border=True):
+        st.markdown("**Action Plan**")
+        st.caption("Click any cell to edit · Use the + button to add rows · Save when done.")
+
+        edited_actions = st.data_editor(
+            act_edit_df,
+            num_rows="dynamic",
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Action":   st.column_config.TextColumn("Action Item",                   width="large"),
+                "Assignee": st.column_config.TextColumn("Assignee",                      width="medium"),
+                "Category": st.column_config.SelectboxColumn("Category", options=ACTION_CATS, width="medium"),
+                "Due Date": st.column_config.TextColumn("Due Date (YYYY-MM-DD)",         width="medium"),
+                "Status":   st.column_config.SelectboxColumn("Status",   options=ACTION_STATUSES, width="medium"),
+                "Notes":    st.column_config.TextColumn("Notes",                         width="large"),
+            },
+            key="action_editor",
+        )
+
+        if st.button("Save Actions", type="primary", key="save_actions"):
+            clean = edited_actions.dropna(how="all")
+            clean = clean[clean["Action"].astype(str).str.strip() != ""]
+            with st.spinner("Saving actions…"):
+                save_all_rows("Action_Items", active_poc_id, DISPLAY_ACT, clean)
+            st.success("Action plan saved.")
+            st.rerun()
+
+
+# ─── POC Details tab ──────────────────────────────────────────────────────────
+with tab_details:
+    editor_name = st.session_state.get("editor_name", "")
+    editor_role = st.session_state.get("editor_role", "Snowflake Team")
 
     with st.form("overview_form"):
-        st.markdown("**Contacts**")
-        c1, c2 = st.columns(2)
-        with c1:
-            champion      = st.text_input("Technical Champion",          value=ov.get("Technical Champion",""))
-            champ_title   = st.text_input("Technical Champion Title",    value=ov.get("Technical Champion Title",""))
-        with c2:
-            sponsor       = st.text_input("Exec Business Sponsor",       value=ov.get("Exec Business Sponsor",""))
-            sponsor_title = st.text_input("Exec Business Sponsor Title", value=ov.get("Exec Business Sponsor Title",""))
-        participants = st.text_area("Customer Participants", value=ov.get("Customer Participants",""),
-                                    height=65, placeholder="Jane Smith (Data Engineer), John Doe (IT Lead)…")
+        col_a, col_b = st.columns(2)
 
-        st.divider()
-        st.markdown("**Engagement**")
-        e1, e2 = st.columns(2)
-        with e1:
-            bu = st.selectbox("Business Unit", BUSINESS_UNITS,
-                              index=BUSINESS_UNITS.index(ov["Business Unit"]) if ov.get("Business Unit") in BUSINESS_UNITS else 0)
-        with e2:
-            cloud    = st.selectbox("Cloud Environment", CLOUD_OPTIONS,
-                                    index=CLOUD_OPTIONS.index(ov["Cloud Environment"]) if ov.get("Cloud Environment") in CLOUD_OPTIONS else 0)
-            platform = st.text_input("Current Data Platform", value=ov.get("Current Data Platform",""))
-            volume   = st.text_input("Estimated Data Volume",  value=ov.get("Data Volume",""))
-        saved_c = [x.strip() for x in ov.get("Compliance Requirements","").split(",") if x.strip()]
-        compliance = st.multiselect("Compliance", COMPLIANCE_OPTIONS,
-                                    default=[x for x in saved_c if x in COMPLIANCE_OPTIONS])
+        with col_a:
+            with st.container(border=True):
+                st.markdown("**Contacts**")
+                champion      = st.text_input("Technical Champion",            value=ov.get("Technical Champion", ""))
+                champ_title   = st.text_input("Technical Champion Title",      value=ov.get("Technical Champion Title", ""))
+                sponsor       = st.text_input("Exec Business Sponsor",         value=ov.get("Exec Business Sponsor", ""))
+                sponsor_title = st.text_input("Exec Business Sponsor Title",   value=ov.get("Exec Business Sponsor Title", ""))
+                participants  = st.text_area(
+                    "Customer Participants", value=ov.get("Customer Participants", ""),
+                    height=80, placeholder="Jane Smith (Data Engineer), John Doe (IT Lead)…",
+                )
 
-        st.divider()
-        st.markdown("**Timeline & Status**")
-        t1, t2, t3 = st.columns(3)
-        with t1:
-            try:    sv = datetime.strptime(ov.get("POC Start Date",""), "%Y-%m-%d").date()
-            except: sv = date.today()
-            start_date = st.date_input("Start Date", value=sv)
-        with t2:
-            try:    ev = datetime.strptime(ov.get("Target Completion Date",""), "%Y-%m-%d").date()
-            except: ev = date.today()
-            end_date = st.date_input("Target Completion", value=ev)
-        with t3:
-            status = st.selectbox("POC Status", STATUS_OPTIONS,
-                                  index=STATUS_OPTIONS.index(ov["Status"]) if ov.get("Status") in STATUS_OPTIONS else 0)
+        with col_b:
+            with st.container(border=True):
+                st.markdown("**Engagement**")
+                bu = st.selectbox(
+                    "Business Unit", BUSINESS_UNITS,
+                    index=BUSINESS_UNITS.index(ov["Business Unit"]) if ov.get("Business Unit") in BUSINESS_UNITS else 0,
+                )
+                cloud = st.selectbox(
+                    "Cloud Environment", CLOUD_OPTIONS,
+                    index=CLOUD_OPTIONS.index(ov["Cloud Environment"]) if ov.get("Cloud Environment") in CLOUD_OPTIONS else 0,
+                )
+                platform   = st.text_input("Current Data Platform",   value=ov.get("Current Data Platform", ""))
+                volume     = st.text_input("Estimated Data Volume",   value=ov.get("Data Volume", ""))
+                saved_c    = [x.strip() for x in ov.get("Compliance Requirements", "").split(",") if x.strip()]
+                compliance = st.multiselect(
+                    "Compliance", COMPLIANCE_OPTIONS,
+                    default=[x for x in saved_c if x in COMPLIANCE_OPTIONS],
+                )
 
-        st.divider()
-        st.markdown("**Objectives**")
-        objective = st.text_area("POC Objective", value=ov.get("POC Objective",""), height=70)
-        o1, o2 = st.columns(2)
-        with o1: tc = st.text_area("Technical Success Criteria", value=ov.get("Technical Success Criteria",""), height=80)
-        with o2: bc = st.text_area("Business Success Criteria",  value=ov.get("Business Success Criteria",""),  height=80)
+        with st.container(border=True):
+            st.markdown("**Timeline & Status**")
+            t1, t2, t3 = st.columns(3)
+            with t1:
+                start_date = st.date_input("Start Date", value=parse_date(ov.get("POC Start Date", "")))
+            with t2:
+                end_date = st.date_input("Target Completion", value=parse_date(ov.get("Target Completion Date", "")))
+            with t3:
+                status = st.selectbox(
+                    "POC Status", STATUS_OPTIONS,
+                    index=STATUS_OPTIONS.index(ov["Status"]) if ov.get("Status") in STATUS_OPTIONS else 0,
+                )
 
-        st.divider()
-        st.markdown("**Budget**")
-        b1, b2 = st.columns(2)
-        with b1: poc_budget = st.text_input("POC Budget ($)",      value=ov.get("POC Budget ($)",""))
-        with b2: conf_spend = st.text_input("Confirmed Spend ($)", value=ov.get("Confirmed Spend ($)",""))
+        with st.container(border=True):
+            st.markdown("**Objectives & Success Criteria**")
+            objective = st.text_area("POC Objective", value=ov.get("POC Objective", ""), height=80)
+            o1, o2 = st.columns(2)
+            with o1:
+                tc = st.text_area("Technical Success Criteria", value=ov.get("Technical Success Criteria", ""), height=90)
+            with o2:
+                bc = st.text_area("Business Success Criteria",  value=ov.get("Business Success Criteria", ""),  height=90)
+
+        with st.container(border=True):
+            st.markdown("**Budget**")
+            b1, b2 = st.columns(2)
+            with b1:
+                poc_budget = st.text_input("POC Budget ($)",      value=ov.get("POC Budget ($)", ""),      placeholder="500000")
+            with b2:
+                conf_spend = st.text_input("Confirmed Spend ($)", value=ov.get("Confirmed Spend ($)", ""), placeholder="0")
 
         if st.form_submit_button("Save Details", type="primary", use_container_width=True):
-            save_overview(active_poc_id, {
-                "Technical Champion": champion, "Technical Champion Title": champ_title,
-                "Exec Business Sponsor": sponsor, "Exec Business Sponsor Title": sponsor_title,
-                "Customer Participants": participants, "Business Unit": bu,
-                "Cloud Environment": cloud, "Current Data Platform": platform, "Data Volume": volume,
-                "Compliance Requirements": ", ".join(compliance),
-                "POC Start Date": str(start_date), "Target Completion Date": str(end_date),
-                "Status": status, "POC Objective": objective,
-                "Technical Success Criteria": tc, "Business Success Criteria": bc,
-                "POC Budget ($)": poc_budget, "Confirmed Spend ($)": conf_spend,
-            })
-            st.success(f"Saved by {editor_name or editor_role}."); st.rerun()
+            with st.spinner("Saving…"):
+                save_overview(active_poc_id, {
+                    "Technical Champion":        champion,
+                    "Technical Champion Title":  champ_title,
+                    "Exec Business Sponsor":     sponsor,
+                    "Exec Business Sponsor Title": sponsor_title,
+                    "Customer Participants":     participants,
+                    "Business Unit":             bu,
+                    "Cloud Environment":         cloud,
+                    "Current Data Platform":     platform,
+                    "Data Volume":               volume,
+                    "Compliance Requirements":   ", ".join(compliance),
+                    "POC Start Date":            str(start_date),
+                    "Target Completion Date":    str(end_date),
+                    "Status":                    status,
+                    "POC Objective":             objective,
+                    "Technical Success Criteria": tc,
+                    "Business Success Criteria":  bc,
+                    "POC Budget ($)":            poc_budget,
+                    "Confirmed Spend ($)":       conf_spend,
+                })
+            st.success(f"Saved by {editor_name or editor_role}.")
+            st.rerun()
